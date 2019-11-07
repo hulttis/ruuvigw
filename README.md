@@ -1,3 +1,6 @@
+# NOT YET TESTED !!!
+
+
 # RUUVI GATEWAY
 This software can be used to collect measurement data from Ruuvitag Bluetooth Low Energy devices https://ruuvi.com/
 
