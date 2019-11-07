@@ -41,7 +41,7 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
  
 ### RUUVIGW
 - file: ruuvigw.json
-- see `configs/ruuvigw.json` for example configuration
+- see `ruuvigw.json` for example configuration
 
 | `COMMON`: [object]    | optional                                                         |
 |:----------------------|:-----------------------------------------------------------------|
@@ -99,9 +99,9 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `<output>`: [string]                          | name of the output InfluxDB and/or MQTT instance                                                                  |
 | `FIELDS`: [object]                            | ruuvitag to InfluxDB and MQTT field name mapping (see ruuvitag fields)                                            |
 | &nbsp;&nbsp;&nbsp`<ruuvitag field>`: [string] | ruuvigw field name                                                                                                |
-| `ROUND`: [object]                             | ruuvitag measurement value rounding decimals (see *configs/ruuvigw.json*)                                           |
-| `DELTA`: [object]                             | ruuvitag measurement value change to trigger update, otherwise updated by max_interval (see *configs/ruuvigw.json*) |
-| `MAXDELTA`: [object]                          | ruuvitag measurement maximum allowed value change (see *configs/ruuvigw.json*)                                      |
+| `ROUND`: [object]                             | ruuvitag measurement value rounding decimals (see *ruuvigw.json*)                                           |
+| `DELTA`: [object]                             | ruuvitag measurement value change to trigger update, otherwise updated by max_interval (see *ruuvigw.json*) |
+| `MAXDELTA`: [object]                          | ruuvitag measurement maximum allowed value change (see *ruuvigw.json*)                                      |
 
 
 | `RUUVITAG`: [object]                                       | required                                                                             |
@@ -112,7 +112,7 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `device_timeout`: [integer]                                | hcidump timeout in ms (default: 10000ms)                                             |
 | `sudo`: [boolean]                                          | use sudo for hcidump command (default: False). needed if not run as root. set false for docker             |
 | `whtlist_from_tags`: [boolean]                             | generate whitelist from the TAGS                                                     |
-| `TAGS`: [object]                                           | ruuvitags (see *configs/ruuvigw.json*)                                                 |
+| `TAGS`: [object]                                           | ruuvitags (see *ruuvigw.json*)                                                 |
 | &nbsp;&nbsp;&nbsp;`<mac>`: [string]                        | ruuvitag mac address                                                                 |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`<tag name>`: [string] | ruuvitag name                                                                        |
 | `WHTLIST`: [list]                                          |                                                                                      |
@@ -122,7 +122,7 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 
 ### LOGGER
 - file: ruuvigw_logging.json
-- see  `configs/ruuvigw_logging.json` for example configuration 
+- see  `ruuvigw_logging.json` for example configuration 
 
 # INSTALLATION
 ## REQUIREMENTS
