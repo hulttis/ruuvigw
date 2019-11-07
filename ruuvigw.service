@@ -1,0 +1,11 @@
+[Unit]
+ Description=Ruuvi Gateway
+ After=multi-user.target
+
+ [Service]
+ Type=idle
+ ExecStart=/app/ruuvigw/env/bin/python /app/ruuvigw/ruuvigw.py -c /app/ruuvigw/ruuvigw.json -l /app/ruuvigw/ruuvigw_logging.json
+
+ [Install]
+ WantedBy=multi-user.target
+

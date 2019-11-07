@@ -1,0 +1,169 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+
+    "formatters": {
+        "basic": {
+            "format": "[%(asctime)s.%(msecs)03d %(levelname)-8.8s] %(process)6d %(name)-30.30s %(funcName)-20.20s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        },
+        "long": {
+            "format": "[%(asctime)s.%(msecs)03d %(levelname)-8.8s] %(process)6d %(name)-30.30s %(filename)-20.20s line:%(lineno)-4d %(processName)-20.20s func:%(funcName)-20.20s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        }
+    },
+
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "INFO",
+            "formatter": "basic",
+            "stream": "ext://sys.stdout"
+        },
+        "error_fh": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "ERROR",
+            "formatter": "long",
+            "filename": "/var/log/ruuvigw/errors.log",
+            "maxBytes": 10485760,
+            "backupCount": 10,
+            "encoding": "utf8"
+        },
+        "ruuvigw_fh": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "basic",
+            "filename": "/var/log/ruuvigw/ruuvigw.log",
+            "maxBytes": 10485760,
+            "backupCount": 10,
+            "encoding": "utf8" 
+        },
+        "ruuvi_aioclient_fh": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "basic",
+            "filename": "/var/log/ruuvigw/ruuvi_aioclient.log",
+            "maxBytes": 10485760,
+            "backupCount": 10,
+            "encoding": "utf8" 
+        },
+        "influx_aioclient_fh": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "basic",
+            "filename": "/var/log/ruuvigw/influx_aioclient.log",
+            "maxBytes": 10485760,
+            "backupCount": 10,
+            "encoding": "utf8" 
+        },
+        "mqtt_aioclient_fh": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "basic",
+            "filename": "/var/log/ruuvigw/mqtt_aioclient.log",
+            "maxBytes": 10485760,
+            "backupCount": 10,
+            "encoding": "utf8" 
+        },
+        "ruuvi_influx_fh": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "basic",
+            "filename": "/var/log/ruuvigw/ruuvi_influx.log",
+            "maxBytes": 10485760,
+            "backupCount": 10,
+            "encoding": "utf8" 
+        },
+        "ruuvi_mqtt_fh": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "basic",
+            "filename": "/var/log/ruuvigw/ruuvi_mqtt.log",
+            "maxBytes": 10485760,
+            "backupCount": 10,
+            "encoding": "utf8" 
+        },
+        "aioruuvitag_fh": {
+            "class": "logging.handlers.RotatingFileHandler",
+            "level": "DEBUG",
+            "formatter": "basic",
+            "filename": "/var/log/ruuvigw/aioruuvitag.log",
+            "maxBytes": 10485760,
+            "backupCount": 10,
+            "encoding": "utf8" 
+        }
+    },
+
+    "root": {
+        "level": "INFO",
+        "handlers": ["console", "error_fh"]
+    },
+
+    "loggers": {
+        "/var/log/ruuvigw/_main__": {
+            "level": "INFO",
+            "handlers": ["console"],
+            "propagate": false
+        },
+        "ruuvigw": {
+            "level": "DEBUG",
+            "handlers": ["ruuvigw_fh"],
+            "propagate": true
+        },
+        "ruuvi_aioclient": {
+            "level": "DEBUG",
+            "handlers": ["ruuvi_aioclient_fh"],
+            "propagate": true
+        },
+        "influx_aioclient": {
+            "level": "INFO",
+            "handlers": ["influx_aioclient_fh"],
+            "propagate": true
+        },
+        "mqtt_aioclient": {
+            "level": "INFO",
+            "handlers": ["mqtt_aioclient_fh"],
+            "propagate": true
+        },
+        "ruuvi_influx":  {
+            "level": "INFO",
+            "handlers": ["ruuvi_influx_fh"],
+            "propagate": true
+        },
+        "ruuvi_mqtt":  {
+            "level": "INFO",
+            "handlers": ["ruuvi_mqtt_fh"],
+            "propagate": true
+        },
+        "aioruuvitag_ble": {
+            "level": "INFO",
+            "handlers": ["aioruuvitag_fh"],
+            "propagate": true
+        },
+        "mixinSchedulerEvent": {
+            "level": "WARN",
+            "handlers": ["console"],
+            "propagate": false
+        },
+        "asyncio": {
+            "level": "WARN",
+            "handlers": ["console"],
+            "propagate": false
+        },
+        "apscheduler": {
+            "level": "WARN",
+            "handlers": ["console"],
+            "propagate": false
+        },
+        "aiohttp": {
+            "level": "WARN",
+            "handlers": ["console"],
+            "propagate": false
+        },
+        "aiodns": {
+            "level": "WARN",
+            "handlers": ["console"],
+            "propagate": false
+        }
+   }
+}
