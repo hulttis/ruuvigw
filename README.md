@@ -1,10 +1,7 @@
-# NOT YET TESTED !!!
-
-
-# RUUVI GATEWAY
+# RUUVI GATEWAY 2.5.3 (191108)
 This software can be used to collect measurement data from Ruuvitag Bluetooth Low Energy devices https://ruuvi.com/
 
-**MAIN FUNCTIONALITIES**
+## MAIN FUNCTIONALITIES
 - Store selectable set of ruuvitag data fields to (multiple) Influx databases
 - Publish selectable set of ruuvitag data fields to (multiple) MQTT brokers
 - Home assistant Auto Discovery (on restart and/or on request)
@@ -12,7 +9,7 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 - Ruuvitag per measurement instance white/black lists (white list can be generated from the TAGS)
 - Ruuvitag per measurement instance field renaming
 
-# RUUVITAG FIELDS
+## RUUVITAG FIELDS
 - ruuvitag dataformats 3 and 5 are supported. see  https://github.com/ruuvi/ruuvi-sensor-protocols for more information
   
 | RUUVITAG FIELD     | Unit |                               |
@@ -39,9 +36,7 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `dewPoint`                 | C      | dew point                  |
 | `airDensity`               | kg/m^3 | air density                |
 
-# CONFIGURATION
-- All configurations are in .json files
- 
+## CONFIGURATION
 ### RUUVIGW
 - file: ruuvigw.json
 - see `ruuvigw.json` for example configuration
@@ -101,11 +96,7 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `OUTPUT`: [list]                              | list of InfluxDB/MQTT output(s) (default: "influx_default", "mqtt_default")                                       |
 | `<output>`: [string]                          | name of the output InfluxDB and/or MQTT instance                                                                  |
 | `FIELDS`: [object]                            | ruuvitag to InfluxDB and MQTT field name mapping (see ruuvitag fields)                                            |
-| &nbsp;&nbsp;&nbsp`<ruuvitag field>`: [string] | ruuvigw field name                                                                                                |
-| `ROUND`: [object]                             | ruuvitag measurement value rounding decimals (see *ruuvigw.json*)                                           |
-| `DELTA`: [object]                             | ruuvitag measurement value change to trigger update, otherwise updated by max_interval (see *ruuvigw.json*) |
-| `MAXDELTA`: [object]                          | ruuvitag measurement maximum allowed value change (see *ruuvigw.json*)                                      |
-
+| &nbsp;&nbsp;&nbsp`<ruuvitag field>`: [string] | ruuvigw field name used for InfluxDB / MQTT                                                                       |
 
 | `RUUVITAG`: [object]                                       | required                                                                             |
 |:-----------------------------------------------------------|:-------------------------------------------------------------------------------------|
@@ -124,32 +115,52 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | &nbsp;&nbsp;&nbsp;`<mac>`: [string]                        | black listed mac                                                                     |
 
 ### LOGGER
-- file: ruuvigw_logging.json
 - see  `ruuvigw_logging.json` for example configuration 
 
-# INSTALLATION
-## REQUIREMENTS
-- Linux (tested in Ubuntu server 18.04.03). **NOT WORKING IN WINDOWS**
-- python 3.7.x (tested with 3.7.4)
+## INSTALLATION
+### REQUIREMENTS
+- Linux (tested in Ubuntu server 18.04.03 and 2019-09-26-raspbian-buster-lite). **NOT WORKING IN WINDOWS**
+- python 3.7.x  (tested with 3.7.4)
+- pip3.7
+- virtualenv (`pip3.7 install --user virtualenv`)
+- git (`sudo apt -y install git`)
 - bluez and bluez-hcitool (`sudo apt -y install bluez bluez-hcitool`)
 
-## DOCKER
-- figure out yourself 
+### PYTHON 3.7.4 AND PIP (FROM SOURCE) - IF NEEDED
+- `cd ~/`
+- `sudo apt -y install build-essential tk-dev libncurses5-dev libncursesw5-dev libreadline6-dev libdb5.3-dev libgdbm-dev libsqlite3-dev libssl-dev libbz2-dev libexpat1-dev liblzma-dev zlib1g-dev libffi-dev libbluetooth-dev`
+- `wget https://www.python.org/ftp/python/3.7.4/Python-3.7.4.tar.xz`
+- `tar xf Python-3.7.4.tar.xz`
+- `cd Python-3.7.4/`
+- `./configure`
+- `make -j 4`
+- `sudo make altinstall`
+- `python3.7 -V && pip3.7 -V`
+
+### DOCKER
+- figure out yourself
 - see `https://github.com/hulttis/ruuvigw-docker` for Dockerfile sample
   
-## DOCKER-COMPOSE
+### DOCKER-COMPOSE
 - see `https://github.com/hulttis/ruuvigw-docker` for installation instructions
 
-## SERVICE
+### LINUX SERVICE
 - `sudo -i`
-- create /app directory (`mkdir -p /app`)
+- create /app directory (`mkdir -p /app && cd /app`)
 - create /var/log/ruuvigw directory (`mkdir -p /var/log/ruuvigw`) for logs
 - clone git repository to /app directory (`git clone https://github.com/hulttis/ruuvigw.git`)
 - edit /app/ruuvigw/ruuvigw.json file (`nano /app/ruuvigw/ruuvigw.json`)
+- create virtual environment (`cd /app/ruuvigw && python3.7 -m venv env`)
+- activate virtual environment (`source env/bin/activate`)
+- check python and pip (`which python && which pip && python -V && pip -V`)
+- install requirements (`pip install -r requirements.txt`)
+- deactivate virtual environment (`deactivate`)
 - copy /app/ruuvigw/ruuvigw.service to /lib/systemd/system directory (`cp /app/ruuvigw/ruuvigw.service /lib/systemd/system/.`)
-- reload daemons (`sudo systemctl daemon-reload`)
-- enable ruuvigw (`sudo systemctl enable ruuvigw`)
-- start ruuvigw (`sudo systemctl start ruuvigw`)
+- reload daemons (`systemctl daemon-reload`)
+- enable ruuvigw (`systemctl enable ruuvigw`)
+- start ruuvigw (`systemctl start ruuvigw`)
+- check ruuvigw status (`systemctl status ruuvigw`)
+- checl ruuvigw logs (`journalctl -u ruuvigw -b --no-pager`)
   
 ## COMMAND LINE PARAMETERS
 ### ruuvigw.py [-h] [-c config] [-l logconfig]

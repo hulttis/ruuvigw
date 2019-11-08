@@ -1,13 +1,13 @@
 # coding=utf-8
 # !/usr/bin/python3
-# Name:         RUUVI to INFLUXDB
+# Name:         RUUVI to INFLUXDB / MQTT
 #
 # Author:       Timo Koponen
 #
 # Created:      07.04.2019
 # Copyright:    (c) 2019
 # Licence:      Do not distribute,
-# Version:      2.5.1
+# Version:      2.5.3
 #
 # Required:     aioinflux                               // pipenv install aioinflux pandas
 #               apscheduler                             // pipenv install apscheduler
