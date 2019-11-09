@@ -132,7 +132,7 @@ class config_reader(object):
         if not l_hostname:
             l_hostname = socket.getfqdn().split('.', 1)[0]
             self._cfg['COMMON']['hostname'] = l_hostname
-        print ('hostname:            {0:s}'.format(l_common.get('hostname', _def.COMMON_HOSTNAME)))
+        print (f'hostname:            {l_hostname}')
         l_nameservers = l_common.get('nameservers', None)
         if l_nameservers:
             for l_idx, l_nameserver in enumerate(l_nameservers):
@@ -152,31 +152,32 @@ class config_reader(object):
                 print (f'INFLUX: {l_name}')
                 print ('-'*_def.SEPARATOR_LENGTH)
                 if l_name in l_unique:
-                    raise ValueError(f'influx/mqtt name need to be unique')
+                    raise ValueError(f'influx/mqtt name need to be unique. check configuration for {l_name}')
                 l_unique.append(l_name)
                 l_enable = l_influx.get('enable', _def.INFLUX_ENABLE)
                 print ('   enable:              {0:s}'.format(str(l_enable)))
                 if l_enable:
                     l_influx_enabled = True
-                    l_policy = l_influx.get('POLICY')
-                    # print ('   load balancer:       {0:s}'.format(str(l_influx.get('load_balancer', _def.INFLUX_LOAD_BALANCER))))
-                    print ('   workers:             {0:d}'.format(l_influx.get('workers', _def.INFLUX_WORKERS)))
-                    print ('   queue size:          {0:d}'.format(l_influx.get('queue_size', _def.INFLUX_QUEUE_SIZE)))
-                    print ('   super interval:      {0:.1f} s'.format(l_influx.get('supervision_interval', _def.INFLUX_SUPERVISION_INTERVAL)))
-                    print ('   timeout:             {0:.1f} s'.format(l_influx.get('timeout', _def.INFLUX_TIMEOUT)))
-                    print ('   retries:             {0:d}'.format(l_influx.get('retries', _def.INFLUX_RETRIES)))
-                    l_host = l_influx.get('host', _def.INFLUX_HOST) + ':' + str(l_influx.get('port', _def.INFLUX_PORT))
+                    l_policy = l_influx.get('POLICY', _def.INFLUX_POLICY)
+                    l_host = l_influx.get('host', None)
+                    if not l_host:
+                        raise ValueError(f'host is required. check configuration for {l_name}')
+                    l_host += ':' + str(l_influx.get('port', _def.INFLUX_PORT))
                     print ('   host:                {0:s}'.format(l_host))
                     print ('   ssl:                 {0:s}'.format(str(l_influx.get('ssl', _def.INFLUX_SSL))))
                     print ('   ssl_verify:          {0:s}'.format(str(l_influx.get('ssl_verify', _def.INFLUX_SSL_VERIFY))))
                     print ('   database:            {0:s}'.format(l_influx.get('database', _def.INFLUX_DATABASE)))
                     print ('   username:            {0:s}'.format(l_influx.get('username', _def.INFLUX_USERNAME)))
-                    print ('   policy:              {0:s}'.format(l_policy.get('name', _def.INFLUX_POLICY_NAME)))
-                    print ('      default:          {0:s}'.format(str(l_policy.get('default', _def.INFLUX_POLICY_DEFAULT))))
-                    print ('      alter:            {0:s}'.format(str(l_policy.get('alter', _def.INFLUX_POLICY_ALTER))))
-                    print ('      duration:         {0:s}'.format(l_policy.get('duration', _def.INFLUX_POLICY_DURATION)))
-                    print ('      replication:      {0:d}'.format(l_policy.get('replication', _def.INFLUX_POLICY_REPLICATION)))
-                    # self._print_queue(cfg=l_influx)
+                    print ('   POLICY:              {0:s}'.format(l_policy.get('name', None)))
+                    print ('      default:          {0:s}'.format(str(l_policy.get('default', ''))))
+                    print ('      alter:            {0:s}'.format(str(l_policy.get('alter', ''))))
+                    print ('      duration:         {0:s}'.format(l_policy.get('duration', '')))
+                    print ('      replication:      {0:d}'.format(l_policy.get('replication', '')))
+                    print ('   workers:             {0:d}'.format(l_influx.get('workers', _def.INFLUX_WORKERS)))
+                    # print ('   queue size:          {0:d}'.format(l_influx.get('queue_size', _def.INFLUX_QUEUE_SIZE)))
+                    # print ('   super interval:      {0:.1f} s'.format(l_influx.get('supervision_interval', _def.INFLUX_SUPERVISION_INTERVAL)))
+                    print ('   timeout:             {0:.1f}s'.format(l_influx.get('timeout', _def.INFLUX_TIMEOUT)))
+                    print ('   retries:             {0:d}'.format(l_influx.get('retries', _def.INFLUX_RETRIES)))
                 print ('')
 
         l_unique_clientid = []
@@ -203,25 +204,40 @@ class config_reader(object):
                         l_mqtt['client_id'] = l_client_id
                     print (f'   client id:           {l_client_id}')
                     if l_client_id in l_unique_clientid:
-                        raise ValueError(f'client_id need to be unique')
+                        raise ValueError(f'client_id need to be unique. check configuration for {l_name}')
                     l_unique_clientid.append(l_client_id)
-                    l_host = l_mqtt.get('host', _def.MQTT_HOST)
+                    l_host = l_mqtt.get('host', None)
+                    if not l_host:
+                        raise ValueError(f'host is required. check configuration for {l_name}')
                     print ('   host:                {0:s}'.format(l_host))
                     l_topic = l_mqtt.get('topic', _def.MQTT_TOPIC)
+                    if not l_topic:
+                        raise ValueError(f'topic is required. check configuration for {l_name}')
                     print ('   topic:               {0:s}'.format(l_topic))
                     print ('   retain:              {0:s}'.format(str(l_mqtt.get('retain', _def.MQTT_RETAIN))))
-                    print ('   adtopic:             {0:s}'.format(l_mqtt.get('adtopic', _def.MQTT_ADTOPIC)))
-                    print ('   adretain:            {0:s}'.format(str(l_mqtt.get('adretain', _def.MQTT_ADRETAIN))))
-                    print ('   anntopic             {0:s}'.format(l_mqtt.get('anntopic', _def.MQTT_ANNTOPIC)))
+                    l_adtopic = l_mqtt.get('adtopic', _def.MQTT_ADTOPIC)
+                    if l_adtopic:
+                        print (f'   adtopic:             {l_adtopic}')
+                        print ('   adretain:            {0:s}'.format(str(l_mqtt.get('adretain', _def.MQTT_ADRETAIN))))
+                    l_anntopic = l_mqtt.get('lwttopic', _def.MQTT_ANNTOPIC)
+                    if l_anntopic:
+                        print (f'   anntopic             {l_anntopic}')
+                    print ('   lwt:                 {0:s}'.format(str(l_mqtt.get('lwt', _def.MQTT_LWT))))
+                    l_lwttopic = l_mqtt.get('lwttopic', _def.MQTT_LWTTOPIC)
+                    if not l_lwttopic:
+                        l_lwttopic = f'{l_topic}/{l_hostname}/lwt'
+                        l_mqtt['lwttopic'] = l_lwttopic
+                    if l_mqtt.get('lwt', _def.MQTT_LWT):
+                        print (f'   lwttopic             {l_lwttopic}')
                     if 'mqtts://' in l_host:
                         print ('   check_hostname:      {0:s}'.format(str(l_mqtt.get('check_hostname', _def.MQTT_CHECK_HOSTNAME))))
                         l_cafile = l_mqtt.get('cafile', _def.MQTT_CAFILE)
                         if l_cafile:
                             print (f'   cafile:              {l_cafile}')
                             if not os.path.exists(l_cafile):
-                                raise ValueError(f'''mqtts used but cafile doesn't exist''')
+                                raise ValueError(f'''mqtts used but cafile doesn't exist. check configuration for {l_name}''')
                         else:
-                            raise ValueError(f'''mqtts used but cafile is NOT defined''')
+                            raise ValueError(f'''mqtts used but cafile is NOT defined. check configuration for {l_name}''')
                     # if l_mqtt.get('capath', _def.MQTT_CAPATH):
                     #     print ('   capath:              {0:s}'.format(l_mqtt.get('capath', _def.MQTT_CAPATH)))
                     # if l_mqtt.get('cadata', _def.MQTT_CADATA):
@@ -229,10 +245,8 @@ class config_reader(object):
                     print ('   QOS:                 {0:d}'.format(l_mqtt.get('qos', _def.MQTT_QOS)))
                     print ('   timeout:             {0:.1f} s'.format(l_mqtt.get('timeout', _def.MQTT_TIMEOUT)))
                     print ('   retries:             {0:d}'.format(l_mqtt.get('retries', _def.MQTT_RETRIES)))
-                    print ('   queue size:          {0:d}'.format(l_mqtt.get('queue_size', _def.MQTT_QUEUE_SIZE)))
+                    # print ('   queue size:          {0:d}'.format(l_mqtt.get('queue_size', _def.MQTT_QUEUE_SIZE)))
                     # LWT
-                    if not l_mqtt.get('lwttopic', None):
-                        l_mqtt['lwttopic'] = f'{l_topic}/status'
                     # self._print_queue(cfg=l_mqtt)
                     l_mqtt_cnt += 1
                 print ('')

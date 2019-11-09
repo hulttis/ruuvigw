@@ -12,20 +12,7 @@
       "name": "influx1",
       "host": "influxhost1",
       "port": 8086,
-      "ssl": false,
-      "ssl_verify": false,
-      "database": "ruuvi_db1",
-      "username": "user1",
-      "password": "passwd1",
-      "timeout": 5.0,
-      "retries": 2,
-      "POLICY": {
-        "name": "oneyear",
-        "duration": "365d",
-        "replication": 1,
-        "default": true,
-        "alter": false
-      }
+      "database": "ruuvi_db1"
     },
     {
       "enable": true,
@@ -37,6 +24,8 @@
       "database": "ruuvi_db2",
       "username": "user2",
       "password": "passwd2",
+      "timeout": 10,
+      "retries": 2,
       "POLICY": {
         "name": "oneweek",
         "duration": "7d",
@@ -64,11 +53,13 @@
       "name": "mqtt2",
       "client_id": "mqtt-2",
       "host": "mqtt://user2:passwd2@mqtt2:1883",
-      "topic": "ruuvi",
+      "topic": "ha/ruuvi2",
       "retain": false,
-      "adtopic": "homeassistant/sensor/ruuvi",
+      "adtopic": "homeassistant/sensor/ruuvi2",
       "adretain": true,
-      "anntopic": "ruuvi/announce",
+      "anntopic": "ruuvi2/announce",
+      "lwt": true,
+      "lwtmessage": "offline",
       "qos": 1,
       "cafile": "./certs/ca.crt",
       "check_hostname": false,

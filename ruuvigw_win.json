@@ -38,7 +38,8 @@
       "adtopic": "tst1/homeassistant/sensor/ruuvi",
       "adretain": true,
       "anntopic": "tst1/ha/ruuvi/announce",
-      "qos": 1
+      "qos": 1,
+      "lwt": true
     },
     {
       "enable": true,

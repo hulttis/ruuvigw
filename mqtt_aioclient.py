@@ -74,17 +74,16 @@ class mqtt_aioclient(_mixinQueue):
             'reconnect_max_interval': 5,
             'reconnect_retries': 4,
             'check_hostname': cfg.get('check_hostname', _def.MQTT_CHECK_HOSTNAME),
-            'will': {
-                'topic': l_lwttopic,
-                'retain': cfg.get('lwtretain', _def.MQTT_LWTRETAIN),
-                'qos': cfg.get('lwtqos', _def.MQTT_LWTQOS),
-                'message': cfg.get('lwtmessage', _def.MQTT_LWTMESSAGE).encode()
-            }
             # # 'certfile': '',
             # 'keyfile': '',
         }
-        if not l_lwttopic:
-            del self._client_config['will']
+        if cfg.get('lwt', _def.MQTT_LWT):
+            self._client_config['will'] = {
+                'topic': f'''{cfg.get('lwttopic')}''',
+                'retain': _def.MQTT_LWTRETAIN,
+                'qos': _def.MQTT_LWTQOS,
+                'message': cfg.get('lwtmessage', _def.MQTT_LWTMESSAGE).encode()
+            }
         logger.debug(f'{self._name} client_config: {self._client_config}')
         self._topic = cfg.get('topic', _def.MQTT_TOPIC)
         self._qos = cfg.get('qos', _def.MQTT_QOS)
@@ -116,6 +115,7 @@ class mqtt_aioclient(_mixinQueue):
                 logger.info(f'{self._name} MQTT{l_secure} connected client_id:{l_client_id}')
                 logger.debug(f'{self._name} host:{l_host} topic: {self._topic} qos:{self._qos} retain:{self._retain}')
                 self._client_connected = True
+                await self._publish_lwt(cfg=cfg)
                 return True
             else:
                 logger.error(f'{self._name} MQTT{l_secure} connection failed. Status:{l_status}')
@@ -178,6 +178,18 @@ class mqtt_aioclient(_mixinQueue):
             except:
                 logger.exception(f'*** {self._name} MQTT unsubscribe failed. topic:{topic}')
                 await self._disconnect()
+
+#-------------------------------------------------------------------------------
+    async def _publish_lwt(self, *, cfg):
+        l_lwt = cfg.get('lwt', _def.MQTT_LWT)
+        logger.debug(f'{self._name} lwt:{str(l_lwt)}')
+
+        if l_lwt:
+            try:
+                l_topic = self._client_config['will']['topic']
+                await self._publish(topic=l_topic, payload=_def.MQTT_LWTONLINE.encode(), retain=_def.MQTT_LWTRETAIN)
+            except:
+                pass
 
 #-------------------------------------------------------------------------------
     async def _publish(self, *, topic, payload, retain):

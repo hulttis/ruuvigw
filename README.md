@@ -1,4 +1,4 @@
-# RUUVI GATEWAY 2.5.4 (191109)
+# RUUVI GATEWAY 2.5.5 (191110)
 This software can be used to collect measurement data from Ruuvitag Bluetooth Low Energy devices https://ruuvi.com/
 
 ## MAIN FUNCTIONALITIES
@@ -47,23 +47,23 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `hostname`: [string]  | hostname, if not given will be detected automatically            |
 
 
-| `INFLUX`: [list]            | optional                                                           |
-| :-------------------------  | :--------------------------------------------------------          |
-| `enable`: [boolean]         | enable/disable InfluxDB instance (default: true)                   |
-| `name`: [string]            | **unique** name of the InfluxDB instance                           |
-| `host`: [string]            | InfluxDB host (default: localhost)                                 |
-| `port`: [integer]           | InfluxDB port (default: 8086)                                      |
-| `ssl`: [boolean]            | use ssl (default: false)                                           |
-| `ssl_verify`: [boolean]     | verify ssl certificate (default: true)                             |
-| `database`: [string]        | name of the InfluxDB database                                      |
-| `username`: [string]        | InfluxDB username                                                  |
-| `password`: [string]        | InfluxDB password                                                  |
-| **`POLICY`**: [object]      |                                                                    |
-| &nbsp;&nbsp;&nbsp;`name`: [string]         | policy name (default: _default)                                    |
-| &nbsp;&nbsp;&nbsp;`   duration`: [string]     | policy duration (default: 0s - forever)                            |
-| &nbsp;&nbsp;&nbsp;`   replication`: [integer] | policy replication (default: 1)                                    |
-| &nbsp;&nbsp;&nbsp;`   default`: [boolean]     | set as default policy (default: false)                             |
-| &nbsp;&nbsp;&nbsp;`   alter`: [boolean]       | alter if policy exists (default: false)                            |
+| `INFLUX`: [list]                              | optional                                         |
+|-----------------------------------------------|--------------------------------------------------|
+| `enable`: [boolean]                           | enable/disable InfluxDB instance (default: true) |
+| `name`: [string]                              | **unique** name of the InfluxDB instance         |
+| `host`: [string]                              | InfluxDB host (default: localhost)               |
+| `port`: [integer]                             | InfluxDB port (default: 8086)                    |
+| `ssl`: [boolean]                              | use ssl (default: false)                         |
+| `ssl_verify`: [boolean]                       | verify ssl certificate (default: true)           |
+| `database`: [string]                          | name of the InfluxDB database                    |
+| `username`: [string]                          | InfluxDB username                                |
+| `password`: [string]                          | InfluxDB password                                |
+| **`POLICY`**: [object]                        |                                                  |
+| &nbsp;&nbsp;&nbsp;`name`: [string]            | policy name (default: _default)                  |
+| &nbsp;&nbsp;&nbsp;`   duration`: [string]     | policy duration (default: 0s - forever)          |
+| &nbsp;&nbsp;&nbsp;`   replication`: [integer] | policy replication (default: 1)                  |
+| &nbsp;&nbsp;&nbsp;`   default`: [boolean]     | set as default policy (default: false)           |
+| &nbsp;&nbsp;&nbsp;`   alter`: [boolean]       | alter if policy exists (default: false)          |
 
 
 
@@ -71,13 +71,15 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 |:-------------------------------------------------------------|:------------------------------------------------------------------------------|
 | `enable`: [boolean]                                          | enable/disable MQTT instance (default: true)                                  |
 | `name`: [string]                                             | **unique** name of the MQTT instance                                          |
-| `client_id`: [string]                                        | **unique** client-id (default: `hostname-uuid4`)                                |
+| `client_id`: [string]                                        | **unique** client-id (default: `hostname-uuid4`)                              |
 | `host`: [string]                                             | mqtt host (default: mqtt://localhost:1883)                                    |
 | `topic`: [string]                                            | mqtt publish topic                                                            |
 | `retain`: [boolean]                                          | mqtt publish retain (default: false)                                          |
 | `adtopic`: [string]                                          | home assistant autodiscovery topic (default: None - no autodiscovery)         |
 | `adretain`: [boolean]                                        | home assistant autodiscovery retain (default: false)                          |
 | `anntopic`: [string]                                         | home assistant auto discovery announce topic (default: None - not subscribed) |
+| `lwt`: [boolean]                                             | enable LWT (Last Will Testament (default: False)                              |
+| `lwttopic`: [string]                                         | LWT topic (default: `topic/hostname/lwt`)                                     |
 | `qos`: [integer]                                             | quality of service (default: 1)                                               |
 | `cafile`: [string]                                           | certificate file                                                              |
 | `check_hostname`: [boolean]                                  | check the peer cert’s hostname                                                |
@@ -86,7 +88,6 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`unit_of_meas`: [string] | unit of measurement                                                           |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`dev_cla`: [string]      | device class                                                                  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`val_tpl`: [string]      | value template                                                                |
-
 | `RUUVI`: [object]                             | required                                                                                                          |
 |:----------------------------------------------|:------------------------------------------------------------------------------------------------------------------|
 | `name`: [string]                              | name of the ruuvi instance (default: ***ruuvi_default***) note: used also as InfluxDB measurement name            |

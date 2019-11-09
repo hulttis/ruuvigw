@@ -17,7 +17,7 @@ import sys
 PROGRAM_NAME = 'Ruuvi Gateway'
 LONG_PROGRAM_NAME = 'Ruuvi InfluxDB/MQTT Gateway'
 PROGRAM_PY = 'ruuvigw.py'
-VERSION = '2.5.4 (191109)'
+VERSION = '2.5.5 (191110)'
 PROGRAM_COPYRIGHT = '(c) TK'
 
 CFGFILE = 'ruuvigw.json'
@@ -50,11 +50,13 @@ INFLUX_PASSWORD = ''
 INFLUX_DATABASE = '_default' 
 INFLUX_TIMEOUT = 2.0 
 INFLUX_RETRIES = 2
-INFLUX_POLICY_NAME = '_default' 
-INFLUX_POLICY_DURATION = '0s'  
-INFLUX_POLICY_REPLICATION = 1
-INFLUX_POLICY_DEFAULT = False
-INFLUX_POLICY_ALTER = False
+INFLUX_POLICY = {
+    "name": "_default",
+    "duration": "365d",
+    "replication": 1,
+    "default": False,
+    "alter": False
+    }
 INFLUX_QUEUE_SIZE = 100
 # RUUVI
 RUUVI_NAME = 'ruuvi_default'
@@ -99,8 +101,6 @@ RUUVI_MAXDELTA = {
     }
 }
 RUUVI_OUTPUT = [
-    "influx_default",
-    "mqtt_default"
 ]
 
 # RUUVITAG
@@ -129,20 +129,24 @@ RUUVITAG_MINMAX = {
         "max": 1100
     }
 }
+
 # MQTT
 MQTT_ENABLE = True
 MQTT_DEBUG = False
-MQTT_TOPIC = 'ruuvitag/default'
-MQTT_ADTOPIC = ''
-MQTT_ANNTOPIC = ''
-MQTT_NAME = 'mqtt'
-MQTT_HOST = 'mqtt://localhost:1883'
+MQTT_TOPIC = None
+MQTT_ADTOPIC = None
+MQTT_ANNTOPIC = None
+MQTT_NAME = None
+MQTT_HOST = None
 MQTT_CHECK_HOSTNAME = True 
 MQTT_CLIENT_ID = 'mqtt'
 MQTT_CAFILE = ''
 MQTT_CAPATH = ''
 MQTT_CADATA = ''
+MQTT_LWT= False
+MQTT_LWTTOPIC = None
 MQTT_LWTMESSAGE = 'offline'
+MQTT_LWTONLINE = 'online'
 MQTT_LWTRETAIN = True
 MQTT_LWTQOS = 1
 MQTT_USERNAME = ''

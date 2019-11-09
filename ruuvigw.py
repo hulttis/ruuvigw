@@ -7,7 +7,7 @@
 # Created:      07.04.2019
 # Copyright:    (c) 2019
 # Licence:      Do not distribute,
-# Version:      2.5.4
+# Version:      2.5.5
 #
 # Required:     aioinflux                               // pipenv install aioinflux pandas
 #               apscheduler                             // pipenv install apscheduler
