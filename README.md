@@ -1,4 +1,4 @@
-# RUUVI GATEWAY 2.5.3 (191108)
+# RUUVI GATEWAY 2.5.4 (191109)
 This software can be used to collect measurement data from Ruuvitag Bluetooth Low Energy devices https://ruuvi.com/
 
 ## MAIN FUNCTIONALITIES
@@ -50,7 +50,7 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `INFLUX`: [list]            | optional                                                           |
 | :-------------------------  | :--------------------------------------------------------          |
 | `enable`: [boolean]         | enable/disable InfluxDB instance (default: true)                   |
-| `name`: [string]            | **unique** name of the InfluxDB instance (default: influx_default) |
+| `name`: [string]            | **unique** name of the InfluxDB instance                           |
 | `host`: [string]            | InfluxDB host (default: localhost)                                 |
 | `port`: [integer]           | InfluxDB port (default: 8086)                                      |
 | `ssl`: [boolean]            | use ssl (default: false)                                           |
@@ -70,21 +70,22 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `MQTT`: [list]                                               | optional                                                                      |
 |:-------------------------------------------------------------|:------------------------------------------------------------------------------|
 | `enable`: [boolean]                                          | enable/disable MQTT instance (default: true)                                  |
-| `name`: [string]                                             | **unique** name of the MQTT instance (default: mqtt_default)                  |
-| `client_id`: [string]                                        | mqtt client-id (default: mqtt                                                 |
-| `host`: [string]                                             | mqtt host (default: mqtt://localhost:1883) ***note: mqtts is not supported***          |
+| `name`: [string]                                             | **unique** name of the MQTT instance                                          |
+| `client_id`: [string]                                        | **unique** client-id (default: `hostname-uuid4`)                                |
+| `host`: [string]                                             | mqtt host (default: mqtt://localhost:1883)                                    |
 | `topic`: [string]                                            | mqtt publish topic                                                            |
 | `retain`: [boolean]                                          | mqtt publish retain (default: false)                                          |
 | `adtopic`: [string]                                          | home assistant autodiscovery topic (default: None - no autodiscovery)         |
 | `adretain`: [boolean]                                        | home assistant autodiscovery retain (default: false)                          |
 | `anntopic`: [string]                                         | home assistant auto discovery announce topic (default: None - not subscribed) |
-| `qos`: [integer]                                             | quality of service (default: 1)                                          |
+| `qos`: [integer]                                             | quality of service (default: 1)                                               |
+| `cafile`: [string]                                           | certificate file                                                              |
+| `check_hostname`: [boolean]                                  | check the peer cert’s hostname                                                |
 | `ADFIELDS`: [object]                                         | home assistant auto discovery fields (default: see defaults.py)               |
 | &nbsp;&nbsp;&nbsp;`<field name>`: [object]                   | name of the auto discovery field                                              |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`unit_of_meas`: [string] | unit of measurement                                                           |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`dev_cla`: [string]      | device class                                                                  |
 | &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;`val_tpl`: [string]      | value template                                                                |
-
 
 | `RUUVI`: [object]                             | required                                                                                                          |
 |:----------------------------------------------|:------------------------------------------------------------------------------------------------------------------|
@@ -113,6 +114,9 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | &nbsp;&nbsp;&nbsp;`<mac>`: [string]                        | white listed mac                                                                     |
 | `BLKLIST`: [list]                                          |                                                                                      |
 | &nbsp;&nbsp;&nbsp;`<mac>`: [string]                        | black listed mac                                                                     |
+
+### HOME ASSISTANT MQTT AUTO DISCOVERY
+- ruuvigw subscribes mqtt topic defined in `anntopic` and expects mqtt payload to be `ruuvi`
 
 ### LOGGER
 - see  `ruuvigw_logging.json` for example configuration 

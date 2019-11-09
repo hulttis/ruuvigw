@@ -17,7 +17,7 @@ import sys
 PROGRAM_NAME = 'Ruuvi Gateway'
 LONG_PROGRAM_NAME = 'Ruuvi InfluxDB/MQTT Gateway'
 PROGRAM_PY = 'ruuvigw.py'
-VERSION = '2.5.3 (191108)'
+VERSION = '2.5.4 (191109)'
 PROGRAM_COPYRIGHT = '(c) TK'
 
 CFGFILE = 'ruuvigw.json'
@@ -135,13 +135,16 @@ MQTT_DEBUG = False
 MQTT_TOPIC = 'ruuvitag/default'
 MQTT_ADTOPIC = ''
 MQTT_ANNTOPIC = ''
-MQTT_NAME = 'mqtt_default'
+MQTT_NAME = 'mqtt'
 MQTT_HOST = 'mqtt://localhost:1883'
-MQTT_SSL_VERIFY = True 
+MQTT_CHECK_HOSTNAME = True 
 MQTT_CLIENT_ID = 'mqtt'
 MQTT_CAFILE = ''
 MQTT_CAPATH = ''
 MQTT_CADATA = ''
+MQTT_LWTMESSAGE = 'offline'
+MQTT_LWTRETAIN = True
+MQTT_LWTQOS = 1
 MQTT_USERNAME = ''
 MQTT_PASSWORD = ''
 MQTT_QOS = 2

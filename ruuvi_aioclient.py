@@ -29,10 +29,7 @@ import defaults as _def
 #===============================================================================
 class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
     QUEUE_PUT_TIMEOUT = 0.2
-    _lastdata = defaultdict(dict)
-    _cnt = defaultdict(dict)
     _func = 'execute_ruuvi'
-
 #-------------------------------------------------------------------------------
     def __init__(self, *,
         cfg,
@@ -76,6 +73,10 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         self._scheduler = scheduler
         self._schedule(scheduler=scheduler)
         self._hostname = hostname
+
+        self._lastdata = defaultdict(dict)
+        self._cnt = defaultdict(dict)
+
         logger.debug(f'{self._name} exit')
 
 #-------------------------------------------------------------------------------

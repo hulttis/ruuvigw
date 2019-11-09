@@ -17,7 +17,6 @@ import asyncio
 from hbmqtt.client import MQTTClient, ClientException, ConnectException
 from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
 
-import uuid
 import json
 import ciso8601
 from datetime import datetime as _dt
@@ -33,7 +32,6 @@ class mqtt_aioclient(_mixinQueue):
     QUEUE_GET_TIMEOUT = 0.2
     MQTT_MESSAGE_TIMEOUT = 0.2
     MQTT_CONNECT_DELAY = 1.0
-
 #-------------------------------------------------------------------------------
     def __init__(self, *,
         cfg,
@@ -65,21 +63,29 @@ class mqtt_aioclient(_mixinQueue):
         self._stop_event = asyncio.Event()
         self._client = None
         self._client_connected = False
-        self._client_cnt = 0
+        l_will = {}
+        l_lwttopic = cfg.get('lwttopic', None)
         self._client_config = {
             'keep_alive': 10,
             'ping_delay': 1,
-            # 'default_qos': 0,
-            # 'default_retain': False,
+            'default_qos': cfg.get('qos', _def.MQTT_QOS),
+            'default_retain': cfg.get('retain', _def.MQTT_RETAIN),
             'auto_reconnect': True,
-            'reconnect_max_interval': 4,
-            'reconnect_retries': 5
-            # 'topics': {
-            #     '/test': { 'qos': 1 },
-            #     '/some_topic': { 'qos': 2, 'retain': True }
-            # }
+            'reconnect_max_interval': 5,
+            'reconnect_retries': 4,
+            'check_hostname': cfg.get('check_hostname', _def.MQTT_CHECK_HOSTNAME),
+            'will': {
+                'topic': l_lwttopic,
+                'retain': cfg.get('lwtretain', _def.MQTT_LWTRETAIN),
+                'qos': cfg.get('lwtqos', _def.MQTT_LWTQOS),
+                'message': cfg.get('lwtmessage', _def.MQTT_LWTMESSAGE).encode()
+            }
+            # # 'certfile': '',
+            # 'keyfile': '',
         }
-        self._client_uuid = str(uuid.uuid4())
+        if not l_lwttopic:
+            del self._client_config['will']
+        logger.debug(f'{self._name} client_config: {self._client_config}')
         self._topic = cfg.get('topic', _def.MQTT_TOPIC)
         self._qos = cfg.get('qos', _def.MQTT_QOS)
         self._retain = cfg.get('retain', _def.MQTT_RETAIN)
@@ -96,19 +102,23 @@ class mqtt_aioclient(_mixinQueue):
         logger.debug(f'{self._name} cfg:{cfg}')
 
         try:
-            l_client_id =  f'''{cfg.get('client_id', _def.MQTT_CLIENT_ID)}-{self._client_uuid}:{self._client_cnt}'''
-            self._client_cnt += 1
+            l_client_id =  cfg.get('client_id', _def.MQTT_CLIENT_ID)
             self._client = MQTTClient(client_id=l_client_id, loop=self._loop, config=self._client_config)
             l_host = cfg.get('host', _def.MQTT_HOST)
             logger.debug(f'{self._name} connecting mqtt. host:{l_host} client_id:{l_client_id}')
-            l_status = await self._client.connect(l_host)
+            l_secure = ''
+            if 'mqtts://' in l_host:
+                l_status = await self._client.connect(l_host, cafile=cfg.get('cafile')) 
+                l_secure = 'S'
+            else:
+                l_status = await self._client.connect(l_host)
             if l_status == 0:   # Connection Accepted
-                logger.info(f'{self._name} MQTT connected')
-                logger.debug(f'{self._name} host:{l_host} client_id:{l_client_id} topic: {self._topic} qos:{self._qos} retain:{self._retain}')
+                logger.info(f'{self._name} MQTT{l_secure} connected client_id:{l_client_id}')
+                logger.debug(f'{self._name} host:{l_host} topic: {self._topic} qos:{self._qos} retain:{self._retain}')
                 self._client_connected = True
                 return True
             else:
-                logger.error(f'{self._name} MQTT connection failed. Status:{l_status}')
+                logger.error(f'{self._name} MQTT{l_secure} connection failed. Status:{l_status}')
         except ConnectException:
             logger.exception(f'*** {self._name} ConnectException. host:{l_host} client_id:{l_client_id}')
             self._client = None
@@ -125,13 +135,16 @@ class mqtt_aioclient(_mixinQueue):
         logger.debug(f'{self._name}')
 
         if self._client:
-            l_client_id =  f'''{self._cfg.get('client_id', _def.MQTT_CLIENT_ID)}-{self._client_uuid}:{self._client_cnt-1}'''
+            l_client_id = self._cfg.get('client_id', _def.MQTT_CLIENT_ID)
             l_host = self._cfg.get('host', _def.MQTT_HOST)
+            l_secure = ''
+            if 'mqtts://' in l_host:
+                l_secure = 'S'
             await self._client.disconnect()
             self._client_connected = False
             self._client = None
-            logger.warning(f'{self._name} MQTT disconnected')
-            logger.debug(f'{self._name} host:{l_host} client_id:{l_client_id}')
+            logger.warning(f'{self._name} MQTT{l_secure} disconnected client_id:{l_client_id}')
+            logger.debug(f'{self._name} host:{l_host}')
 
 #-------------------------------------------------------------------------------
     async def _subscribe(self, *, topic, qos=QOS_1):
@@ -219,8 +232,6 @@ class mqtt_aioclient(_mixinQueue):
             except:
                 logger.exception(f'*** {self._name}')
                 await self._disconnect()
-
-        logger.warning(f'{self._name} exit')
 
 #-------------------------------------------------------------------------------
     async def _dummy_callback(self, *, message):

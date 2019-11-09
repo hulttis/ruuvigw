@@ -164,6 +164,11 @@
             "level": "WARN",
             "handlers": ["console"],
             "propagate": false
+        },
+        "transitions.core": {
+            "level": "WARN",
+            "handlers": ["console"],
+            "propagate": false
         }
    }
 }

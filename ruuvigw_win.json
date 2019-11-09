@@ -8,7 +8,7 @@
   },
   "INFLUX": [
     {
-      "enable": true,
+      "enable": false,
       "name": "influx_mega102",
       "host": "mega102vm",
       "port": 48087,
@@ -32,14 +32,26 @@
     {
       "enable": true,
       "name": "mqtt102",
-      "client_id": "ruuvitagp50",
       "host": "mqtt://mqtt:passwd@mqtt102:1883",
-      "topic": "tst/ha/ruuvi",
+      "topic": "tst1/ha/ruuvi",
       "retain": false,
-      "adtopic": "tst/homeassistant/sensor/ruuvi",
+      "adtopic": "tst1/homeassistant/sensor/ruuvi",
       "adretain": true,
-      "anntopic": "tst/ha/ruuvi/announce",
+      "anntopic": "tst1/ha/ruuvi/announce",
       "qos": 1
+    },
+    {
+      "enable": true,
+      "name": "mqtts102",
+      "host": "mqtts://mqtt:passwd@mqtt102:8883",
+      "topic": "tst2/ha/ruuvi",
+      "retain": false,
+      "adtopic": "tst2/homeassistant/sensor/ruuvi",
+      "adretain": true,
+      "anntopic": "tst2/ha/ruuvi/announce",
+      "qos": 1,
+      "cafile": "./certs/ca.crt",
+      "check_hostname": false
     }
   ],
   "RUUVITAG": {
@@ -98,7 +110,8 @@
         "name": "ruuvi_mqtt",
         "calcs": false,
         "OUTPUT": [
-          "mqtt102"
+          "mqtt102",
+          "mqtts102"
         ],
         "FIELDS": {
           "temperature": "temperature",

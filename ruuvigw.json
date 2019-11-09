@@ -70,6 +70,8 @@
       "adretain": true,
       "anntopic": "ruuvi/announce",
       "qos": 1,
+      "cafile": "./certs/ca.crt",
+      "check_hostname": false,
       "ADFIELDS": {
         "temperature": {
           "unit_of_meas": "C",

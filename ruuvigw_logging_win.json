@@ -121,7 +121,7 @@
             "propagate": true
         },
         "mqtt_aioclient": {
-            "level": "INFO",
+            "level": "DEBUG",
             "handlers": ["mqtt_aioclient_fh"],
             "propagate": true
         },
@@ -131,7 +131,7 @@
             "propagate": true
         },
         "ruuvi_mqtt":  {
-            "level": "INFO",
+            "level": "DEBUG",
             "handlers": ["ruuvi_mqtt_fh"],
             "propagate": true
         },
@@ -161,6 +161,16 @@
             "propagate": false
         },
         "aiodns": {
+            "level": "WARN",
+            "handlers": ["console"],
+            "propagate": false
+        },
+        "hbmqtt.client": {
+            "level": "DEBUG",
+            "handlers": ["console"],
+            "propagate": false
+        },
+        "transitions.core": {
             "level": "WARN",
             "handlers": ["console"],
             "propagate": false

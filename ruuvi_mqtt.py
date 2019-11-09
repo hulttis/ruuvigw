@@ -13,6 +13,7 @@
 import logging
 logger = logging.getLogger(__name__)
 
+import asyncio
 from hbmqtt.mqtt.constants import QOS_0, QOS_1, QOS_2
 from collections import defaultdict
 
@@ -22,8 +23,7 @@ import defaults as _def
 # ==================================================================================
 
 class ruuvi_mqtt(_mqtt):
-    _addata = defaultdict(dict)
-
+    _adlock = asyncio.Lock()
 #-------------------------------------------------------------------------------
     def __init__(self, *,
         cfg,
@@ -42,11 +42,12 @@ class ruuvi_mqtt(_mqtt):
         self._funcs['execute_ruuvi'] = self._execute_ruuvi
         # logger.debug(f'{self._name} funcs:{self._funcs}')
 
+        self._addata = defaultdict(dict)
         self._adtopic = cfg.get('adtopic', _def.MQTT_ADTOPIC)
         self._adretain = cfg.get('adretain', _def.MQTT_ADRETAIN)
         self._adfields = cfg.get('ADFIELDS', _def.MQTT_ADFIELDS)
         self._anntopic = cfg.get('anntopic', _def.MQTT_ANNTOPIC)
-        self._message_callback = self.handle_message
+        self._message_callback = self._handle_message
 
         logger.debug(f'{self._name} done')
 
@@ -68,7 +69,7 @@ class ruuvi_mqtt(_mqtt):
             await super()._disconnect()
 
 #-------------------------------------------------------------------------------
-    async def handle_message(self, *, message):
+    async def _handle_message(self, *, message):
         logger.debug(f'{self._name}')
 
         if message:
@@ -97,10 +98,8 @@ class ruuvi_mqtt(_mqtt):
         if self._adtopic:
             try:
                 l_tags = item['tags']
-                l_mac = l_tags['mac']
                 l_name = l_tags['name']
-                if not self._set_addata(key=l_mac):
-                    l_fields = item['fields']
+                if not self._set_addata(key=l_tags['mac']):
                     l_dev = {
                         'ids': [l_tags['mac']],
                         'name': 'Ruuvi ' + l_name,
@@ -109,7 +108,7 @@ class ruuvi_mqtt(_mqtt):
                         'mf': _def.PROGRAM_COPYRIGHT
                     }
                     logger.info(f'{self._name} auto discovery:{l_name}')
-                    for l_key, _ in l_fields.items():
+                    for l_key, _ in item['fields'].items():
                         if l_key not in l_ignore:
                             l_adtopic = self._adtopic + '/' + l_name + '-' + l_key + '/config' 
                             await self._publish(topic=l_adtopic, payload=b'', retain=False)
@@ -144,7 +143,8 @@ class ruuvi_mqtt(_mqtt):
             if isinstance(l_json, list):
                 for l_item in l_json:
                     l_topic = topic + '/' + l_item['tags']['name']
-                    await self._ruuvi_ad(item=l_item, topic=l_topic)
+                    async with ruuvi_mqtt._adlock:
+                        await self._ruuvi_ad(item=l_item, topic=l_topic)
                     if self._cfg.get('debug', _def.MQTT_DEBUG):
                         l_item['fields']['hostname'] = l_item['tags']['hostname']
                     else:

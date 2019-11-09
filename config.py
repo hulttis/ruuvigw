@@ -14,6 +14,8 @@
 import logging
 logger = logging.getLogger(__name__)
 
+import os.path
+import uuid
 import json
 import socket
 import defaults as _def
@@ -139,12 +141,19 @@ class config_reader(object):
              print ('nameserver:          using system dns server')
         print ('')
 
+        l_unique = []
         l_influx_enabled = False
         l_influxs = self.get_cfg(section='INFLUX')
         if l_influxs:
             for l_influx in l_influxs:
-                print ('INFLUX: {0}'.format(l_influx.get('name', _def.INFLUX_NAME)))
+                l_name = l_influx.get('name', None)
+                if not l_name:
+                    raise ValueError('influx name need to be defined')
+                print (f'INFLUX: {l_name}')
                 print ('-'*_def.SEPARATOR_LENGTH)
+                if l_name in l_unique:
+                    raise ValueError(f'influx/mqtt name need to be unique')
+                l_unique.append(l_name)
                 l_enable = l_influx.get('enable', _def.INFLUX_ENABLE)
                 print ('   enable:              {0:s}'.format(str(l_enable)))
                 if l_enable:
@@ -170,28 +179,49 @@ class config_reader(object):
                     # self._print_queue(cfg=l_influx)
                 print ('')
 
+        l_unique_clientid = []
         l_mqtt_enabled = False
         l_mqtts = self.get_cfg(section='MQTT')
         if l_mqtts:
+            l_mqtt_cnt = 0
             for l_mqtt in l_mqtts:
-                print ('MQTT: {0}'.format(l_mqtt.get('name', _def.MQTT_NAME)))
+                l_name = l_mqtt.get('name', None)
+                if not l_name:
+                    raise ValueError('mqtt name need to be defined')
+                print (f'MQTT: {l_name}')
                 print ('-'*_def.SEPARATOR_LENGTH)
+                if l_name in l_unique:
+                    raise ValueError(f'influx/mqtt name need to be unique')
+                l_unique.append(l_name)
                 l_enable = l_mqtt.get('enable', _def.MQTT_ENABLE)
                 print ('   enable:              {0:s}'.format(str(l_enable)))
                 if l_enable:
                     l_mqtt_enabled = True
-                    if not l_mqtt.get('client_id', _def.MQTT_CLIENT_ID):
-                        l_mqtt['client_id'] = l_common['hostname']
-                    print ('   client id:           {0:s}'.format(l_mqtt.get('client_id', str(_def.MQTT_CLIENT_ID))))
-                    print ('   host:                {0:s}'.format(l_mqtt.get('host', _def.MQTT_HOST)))
-                    # print ('   ssl_verify:          {0:s}'.format(str(l_mqtt.get('ssl_verify', _def.MQTT_SSL_VERIFY))))
-                    print ('   topic:               {0:s}'.format(l_mqtt.get('topic', _def.MQTT_TOPIC)))
+                    l_client_id = l_mqtt.get('client_id', None)
+                    if not l_client_id:
+                        l_client_id = f'''{l_common['hostname']}-{str(uuid.uuid4())}'''
+                        l_mqtt['client_id'] = l_client_id
+                    print (f'   client id:           {l_client_id}')
+                    if l_client_id in l_unique_clientid:
+                        raise ValueError(f'client_id need to be unique')
+                    l_unique_clientid.append(l_client_id)
+                    l_host = l_mqtt.get('host', _def.MQTT_HOST)
+                    print ('   host:                {0:s}'.format(l_host))
+                    l_topic = l_mqtt.get('topic', _def.MQTT_TOPIC)
+                    print ('   topic:               {0:s}'.format(l_topic))
                     print ('   retain:              {0:s}'.format(str(l_mqtt.get('retain', _def.MQTT_RETAIN))))
                     print ('   adtopic:             {0:s}'.format(l_mqtt.get('adtopic', _def.MQTT_ADTOPIC)))
                     print ('   adretain:            {0:s}'.format(str(l_mqtt.get('adretain', _def.MQTT_ADRETAIN))))
                     print ('   anntopic             {0:s}'.format(l_mqtt.get('anntopic', _def.MQTT_ANNTOPIC)))
-                    # if l_mqtt.get('cafile', _def.MQTT_CAFILE):
-                    #     print ('   cafile:              {0:s}'.format(l_mqtt.get('cafile', _def.MQTT_CAFILE)))
+                    if 'mqtts://' in l_host:
+                        print ('   check_hostname:      {0:s}'.format(str(l_mqtt.get('check_hostname', _def.MQTT_CHECK_HOSTNAME))))
+                        l_cafile = l_mqtt.get('cafile', _def.MQTT_CAFILE)
+                        if l_cafile:
+                            print (f'   cafile:              {l_cafile}')
+                            if not os.path.exists(l_cafile):
+                                raise ValueError(f'''mqtts used but cafile doesn't exist''')
+                        else:
+                            raise ValueError(f'''mqtts used but cafile is NOT defined''')
                     # if l_mqtt.get('capath', _def.MQTT_CAPATH):
                     #     print ('   capath:              {0:s}'.format(l_mqtt.get('capath', _def.MQTT_CAPATH)))
                     # if l_mqtt.get('cadata', _def.MQTT_CADATA):
@@ -200,7 +230,11 @@ class config_reader(object):
                     print ('   timeout:             {0:.1f} s'.format(l_mqtt.get('timeout', _def.MQTT_TIMEOUT)))
                     print ('   retries:             {0:d}'.format(l_mqtt.get('retries', _def.MQTT_RETRIES)))
                     print ('   queue size:          {0:d}'.format(l_mqtt.get('queue_size', _def.MQTT_QUEUE_SIZE)))
+                    # LWT
+                    if not l_mqtt.get('lwttopic', None):
+                        l_mqtt['lwttopic'] = f'{l_topic}/status'
                     # self._print_queue(cfg=l_mqtt)
+                    l_mqtt_cnt += 1
                 print ('')
 
         if not l_influxs and not l_mqtts:
