@@ -1,19 +1,15 @@
 # coding=utf-8
 # !/usr/bin/python3
-# Name:         RUUVI to INFLUXDB / MQTT
-#
+# Name:         Ruuvi InfluxDB / MQTT gateway
 # Author:       Timo Koponen
-#
 # Created:      07.04.2019
 # Copyright:    (c) 2019
-# Licence:      Do not distribute,
-# Version:      2.5.5
-#
+# Licence:      MIT
 # Required:     aioinflux                               // pipenv install aioinflux pandas
 #               apscheduler                             // pipenv install apscheduler
 #               aiohttp                                 // pipenv install aiohttp
 #               aiodns                                  // pipenv install aiodns
-#               hbmqtt                                  // pipenv install hbmqtt
+#               aiomqtt                                 // pipenv install aiomqtt
 #               asyncio
 # dev:          pylint                                  // pipenv install -d pylint
 #               aiofiles                                // pipenv install aiofiles
@@ -22,20 +18,19 @@ import os
 import sys
 import time
 import signal
+import asyncio
 import argparse
 import platform 
 import functools
 import traceback
+from contextlib import suppress
 from json import JSONDecodeError
-from datetime import datetime as _dt
 from datetime import timedelta
+from datetime import datetime as _dt
 from multiprocessing import cpu_count
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler as _scheduler
 from apscheduler.events import EVENT_ALL
-
-import asyncio
-import functools
-from contextlib import suppress
 
 from ruuvi_dataclasses import procItem, procDict
 from mixinSchedulerEvent import mixinSchedulerEvent
@@ -69,13 +64,17 @@ class main_class(mixinSchedulerEvent):
 
         global logger
         logger_config(logconfig_file)
-        logger = logging.getLogger('ruuvi')
+        logger = logging.getLogger('ruuvigw')
 
          # read config
         try:
             self._cfgh = _config(configfile=config_file)
         except JSONDecodeError:
             logger.critical('*** failed to read configuration file: {0:s} - terminating'.format(config_file))
+            sys.exit()
+        except ValueError as l_e:
+            logger.critical(f'*** ValueError: {l_e}')
+            print('')
             sys.exit()
         except Exception as l_e:
             logger.critical('*** exception:{0} traceback:{1}'.format(l_e, traceback.format_exc()))
@@ -95,28 +94,27 @@ class main_class(mixinSchedulerEvent):
         # sys.exit()
 
         # setup logger
-        logger.info(f'{_PROGRAM_NAME} {_VERSION}')
         logger.info(f'### logger ready')
-
+        logger.info(f'{_PROGRAM_NAME} {_VERSION}')
 
         # set class variables
         self._procs = procDict()  
         l_common = self._cfgh.get_cfg(section='COMMON')
 
         self._scheduler = _scheduler(
-            max_instances = l_common.get('scheduler_max_instances', _def.COMMON_SCHEDULER_MAXINSTANCES)
+            max_instances = l_common.get('scheduler_instances', _def.COMMON_SCHEDULER_INSTANCES)
         )
         self._scheduler.add_listener(self._job_event, mask=EVENT_ALL)
-        self._scheduler.add_job(
-            self._ticktak,
-            'interval',
-            seconds = 1,
-            id = str('_ticktak_'),
-            replace_existing = True,
-            max_instances = 1,
-            coalesce = True,
-            next_run_time = _dt.now()+timedelta(seconds=5)
-        )
+        # self._scheduler.add_job(
+        #     self._ticktak,
+        #     'interval',
+        #     seconds = 1,
+        #     id = str('_ticktak_'),
+        #     replace_existing = True,
+        #     max_instances = 1,
+        #     coalesce = True,
+        #     next_run_time = _dt.now()+timedelta(seconds=5)
+        # )
         self._loop = None
 
 #-------------------------------------------------------------------------------
@@ -125,7 +123,7 @@ class main_class(mixinSchedulerEvent):
 
 #-------------------------------------------------------------------------------
     def main_func(self):
-        logger.warning(f'started: {_dt.now()} version: {_VERSION}')
+        logger.info(f'started: {_dt.now()}')
 
         self._scheduler.start()
         self._loop = asyncio.get_event_loop()
@@ -135,7 +133,7 @@ class main_class(mixinSchedulerEvent):
                     getattr(signal, l_signame), 
                     functools.partial(self._stop, l_signame)
                 )
-            logger.info('signals registered')
+            logger.debug('signals registered')
         except:
             logger.warning('registering signals failed')
             pass
@@ -156,10 +154,11 @@ class main_class(mixinSchedulerEvent):
             finally:
                 self._scheduler.shutdown()
                 self._shutdown()
+                time.sleep(2)
                 self._loop.stop()
                 self._loop.close()
 
-        logger.warning(f'finished:{str(_dt.now())} version: {_VERSION}')
+        logger.info(f'stopped:{str(_dt.now())}')
 
 #-------------------------------------------------------------------------------
     def _stop(self, signame):
@@ -180,9 +179,10 @@ class main_class(mixinSchedulerEvent):
             for l_influx in l_influxs:
                 if l_influx.get('enable', _def.INFLUX_ENABLE):
                     try:
-                        l_inqueue = asyncio.Queue(loop=self._loop, maxsize=l_influx.get('queue_size', _def.INFLUX_QUEUE_SIZE))
+                        l_inqueue = asyncio.Queue(maxsize=l_influx.get('queue_size', _def.INFLUX_QUEUE_SIZE))
                         l_proc = _influx(
                             cfg = l_influx,
+                            hostname = l_common.get('hostname', _def.COMMON_HOSTNAME),
                             inqueue = l_inqueue,
                             loop = self._loop,
                             scheduler = self._scheduler,
@@ -190,15 +190,15 @@ class main_class(mixinSchedulerEvent):
                         )
                         l_task = self._loop.create_task(l_proc.run())
                         self._procs.add(l_influx.get('name', _def.INFLUX_NAME), procItem(proc=l_proc, queue=l_inqueue, task=l_task))
-                        logger.info('Task:{0:s} created'.format(l_influx.get('name', _def.INFLUX_NAME)))
-                        logger.debug('Proc:{0} Task:{1}'.format(l_proc, l_task))
+                        logger.info('task:{0:s} created'.format(l_influx.get('name', _def.INFLUX_NAME)))
+                        logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
                     except Exception:
                         logger.exception('failed to add task:{0:s}'.format(l_influx.get('name', _def.INFLUX_NAME)))
                         l_res = False
                 else:
                     logger.warning('INFLUX:{0} disabled'.format(l_influx.get('name', _def.INFLUX_NAME)))
         else:
-            logger.error('INFLUX configuration missing')
+            # logger.error('INFLUX configuration required')
             l_res = False
 
         return l_res
@@ -217,9 +217,10 @@ class main_class(mixinSchedulerEvent):
             for l_mqtt in l_mqtts:
                 if l_mqtt.get('enable', _def.MQTT_ENABLE):
                     try:
-                        l_inqueue = asyncio.Queue(loop=self._loop, maxsize=l_mqtt.get('queue_size', _def.MQTT_QUEUE_SIZE))
+                        l_inqueue = asyncio.Queue(maxsize=l_mqtt.get('queue_size', _def.MQTT_QUEUE_SIZE))
                         l_proc = _mqtt(
                             cfg = l_mqtt,
+                            hostname = l_common.get('hostname', _def.COMMON_HOSTNAME),
                             inqueue = l_inqueue,
                             loop = self._loop,
                             scheduler = self._scheduler,
@@ -227,15 +228,15 @@ class main_class(mixinSchedulerEvent):
                         )
                         l_task = self._loop.create_task(l_proc.run())
                         self._procs.add(l_mqtt.get('name', _def.MQTT_NAME), procItem(proc=l_proc, queue=l_inqueue, task=l_task))
-                        logger.info('Task:{0:s} created'.format(l_mqtt.get('name', _def.MQTT_NAME)))
-                        logger.debug('Proc:{0} Task:{1}'.format(l_proc, l_task))
+                        logger.info('task:{0:s} created'.format(l_mqtt.get('name', _def.MQTT_NAME)))
+                        logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
                     except Exception:
                         logger.exception('failed to add task:{0:s}'.format(l_mqtt.get('name', _def.MQTT_NAME)))
                         l_res = False
                 else:
                     logger.warning('MQTT:{0} disabled'.format(l_mqtt.get('name', _def.MQTT_NAME)))
         else:
-            logger.error('MQTT configuration missing')
+            # logger.error('MQTT configuration required')
             l_res = False
 
         return l_res
@@ -256,11 +257,10 @@ class main_class(mixinSchedulerEvent):
                 l_outqueue = self._find_queue(l_measur.get('OUTPUT', None))
                 if l_outqueue:
                     l_outqueues = {**l_outqueues, **l_outqueue}
-            logger.info(f'{l_outqueues}')
             if l_outqueues:
                 logger.debug('outqueues:{0}'.format(l_outqueues))
                 try:
-                    l_inqueue = asyncio.Queue(loop=self._loop, maxsize=l_ruuvi.get('queue_size', _def.RUUVI_QUEUE_SIZE))
+                    l_inqueue = asyncio.Queue(maxsize=l_ruuvi.get('queue_size', _def.RUUVI_QUEUE_SIZE))
                     l_proc = _ruuvi(
                         cfg = l_ruuvi,
                         hostname = l_common.get('hostname', _def.COMMON_HOSTNAME),
@@ -271,8 +271,8 @@ class main_class(mixinSchedulerEvent):
                     )
                     l_task = self._loop.create_task(l_proc.run())
                     self._procs.add(l_ruuvi.get('name', _def.RUUVI_NAME), procItem(proc=l_proc, queue=l_inqueue, task=l_task))
-                    logger.info('Task:{0:s} created'.format(l_ruuvi.get('name', _def.RUUVI_NAME)))
-                    logger.debug('Proc:{0} Task:{1}'.format(l_proc, l_task))
+                    logger.info('task:{0:s} created'.format(l_ruuvi.get('name', _def.RUUVI_NAME)))
+                    logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
                 except Exception:
                     logger.exception('failed to add task:{0:s}'.format(l_ruuvi.get('name', _def.RUUVI_NAME)))
                     l_res = False
@@ -281,7 +281,7 @@ class main_class(mixinSchedulerEvent):
                 logger.debug('procs:{0}'.format(self._procs))
                 l_res = False
         else:
-            logger.error('RUUVI configuration missing')
+            logger.error('*** RUUVI configuration missing')
             l_res = False
 
         return (l_res)
@@ -295,29 +295,40 @@ class main_class(mixinSchedulerEvent):
         l_ruuvitag = self._cfgh.get_cfg(section='RUUVITAG')
         if l_ruuvitag:
             l_outqueue = self._find_queue(l_ruuvitag.get('ruuviname', _def.RUUVITAG_RUUVINAME))
-            l_tag = _tag(
-                loop = self._loop,
-                scheduler = self._scheduler,
-                outqueue = l_outqueue,
-                whtlist = l_ruuvitag.get('WHTLIST', None),
-                blklist = l_ruuvitag.get('BLKLIST', None),
-                tags = l_ruuvitag.get('TAGS', None),
-                sample_interval = l_ruuvitag.get('sample_interval', _def.RUUVITAG_SAMPLE_INTERVAL),
-                calc = l_ruuvitag.get('calc', _def.RUUVITAG_CALC),
-                calc_in_datas = l_ruuvitag.get('calc_in_datas', _def.RUUVITAG_CALC_IN_DATAS),
-                debug = l_ruuvitag.get('debug', _def.RUUVITAG_DEBUG),
-                device_timeout = l_ruuvitag.get('device_timeout', _def.RUUVITAG_DEVICE_TIMEOUT),
-                sudo = l_ruuvitag.get('sudo', _def.RUUVITAG_SUDO),
-                device_reset = l_ruuvitag.get('device_reset', _def.RUUVITAG_DEVICE_RESET),
-                whtlist_from_tags = l_ruuvitag.get('whtlist_from_tags', _def.RUUVITAG_WHTLIST_FROM_TAGS),
-                minmax = l_ruuvitag.get('MINMAX', _def.RUUVITAG_MINMAX)
-            )
-            # start ruuvitag task
-            l_tag.start()
-
-            self._procs.add('aioruuvitag', procItem(proc=None, queue=None, task=l_tag.task()))
-            return True
-
+            try:
+                l_tag = _tag(
+                    loop = self._loop,
+                    scheduler = self._scheduler,
+                    collector = l_ruuvitag.get('collector', _def.RUUVITAG_COLLECTOR),
+                    outqueue = l_outqueue,
+                    whtlist = l_ruuvitag.get('WHTLIST', None),
+                    blklist = l_ruuvitag.get('BLKLIST', None),
+                    tags = l_ruuvitag.get('TAGS', None),
+                    sample_interval = l_ruuvitag.get('sample_interval', _def.RUUVITAG_SAMPLE_INTERVAL),
+                    calc = l_ruuvitag.get('calc', _def.RUUVITAG_CALC),
+                    calc_in_datas = l_ruuvitag.get('calc_in_datas', _def.RUUVITAG_CALC_IN_DATAS),
+                    debug = l_ruuvitag.get('debug', _def.RUUVITAG_DEBUG),
+                    device_timeout = l_ruuvitag.get('device_timeout', _def.RUUVITAG_DEVICE_TIMEOUT),
+                    sudo = l_ruuvitag.get('sudo', _def.RUUVITAG_SUDO),
+                    device_reset = l_ruuvitag.get('device_reset', _def.RUUVITAG_DEVICE_RESET),
+                    whtlist_from_tags = l_ruuvitag.get('whtlist_from_tags', _def.RUUVITAG_WHTLIST_FROM_TAGS),
+                    minmax = l_ruuvitag.get('MINMAX', _def.RUUVITAG_MINMAX),
+                    device = l_ruuvitag.get('device', _def.RUUVITAG_DEVICE)
+                )
+                # start ruuvitag task
+                l_status = l_tag.start()
+                if l_status:
+                    self._procs.add('aioruuvitag', procItem(proc=None, queue=None, task=l_tag.task()))
+                    return True
+                else:
+                    logger.error('*** RUUVITAG start failed')
+            except ValueError:
+                logger.critical(f'*** RUUVITAG start failed')
+            except:
+                logger.exception(f'*** RUUVITAG start failed')
+        else:
+            logger.error('*** RUUVITAG configuration missing')
+            
         return False
 
 #-------------------------------------------------------------------------------
@@ -332,12 +343,9 @@ class main_class(mixinSchedulerEvent):
                     logger.warning(f'shutdown task:{l_key}')
                     if l_proc.proc and hasattr(l_proc.proc, 'shutdown'):
                         l_proc.proc.shutdown()
-                    if not sys.platform.startswith('linux') or os.environ.get('CI') == 'True': 
-                        l_task.cancel()
-                        with suppress(asyncio.CancelledError):
-                            self._loop.run_until_complete(l_task)                    
-        else:
-            logger.warning('no procs')
+                    l_task.cancel()
+                    with suppress(asyncio.CancelledError):
+                        self._loop.run_until_complete(l_task)                    
 
 # ------------------------------------------------------------------------------
     def _find_queue(self, p_key):
@@ -375,6 +383,7 @@ if __name__ == '__main__':
     print ('--- {0:s} STARTED {1:s} ---'.format(_PROGRAM_NAME.upper(), str(_dt.now())))
     print('')
     print('version:             {0}'.format(_VERSION))
+    print('platform:            {0}'.format(sys.platform))
     print('python:              {0}'.format(platform.python_version()))
     print('cpu count:           {0}'.format(cpu_count()))
     print('parent pid:          {0}'.format((os.getpid())))
@@ -382,13 +391,13 @@ if __name__ == '__main__':
     print('')
     print('COMMANDLINE ARGUMENTS')
     print('-'*21)
-    print('configuration file:  {0}'.format(l_args.cfgfile))
-    print('logger config:       {0}'.format(l_args.logcfgfile))
+    print('configuration file:  {0}'.format(l_args.cfgfile.strip()))
+    print('logger config:       {0}'.format(l_args.logcfgfile.strip()))
     print('test mode:           {0}'.format(l_args.testmode))
 
     l_main = main_class(
-        config_file = l_args.cfgfile,
-        logconfig_file = l_args.logcfgfile
+        config_file = l_args.cfgfile.strip(),
+        logconfig_file = l_args.logcfgfile.strip()
     )
     try:
         if l_args.testmode:

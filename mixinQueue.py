@@ -1,17 +1,11 @@
 # coding=utf-8
 # !/usr/bin/python3
 # Name:         mixinQueue
-#
-# Author:       Timo Koponen
-#
-# Created:      18.03.2019
-# Copyright:    (c) 2019
-# Licence:      Do not distribute
-#
-# required:
+# Copyright:    (c) 2019 TK
+# Licence:      MIT
 # -------------------------------------------------------------------------------
 import logging
-logger = logging.getLogger('mixinQueue')
+logger = logging.getLogger('mixin')
 
 import queue
 import asyncio

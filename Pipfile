@@ -12,7 +12,7 @@ apscheduler = "*"
 aioinflux = "*"
 pandas = "*"
 aiodns = "*"
-hbmqtt = "*"
+aiomqtt = "*"
 
 [requires]
 python_version = "3.7"

@@ -2,13 +2,8 @@
 #-------------------------------------------------------------------------------
 # Name:        defaults.py
 # Purpose:     default values
-#
-# Author:      Timo Koponen
-#
-# Created:     09/02/2019
-# modified:    09/02/2019
-# Copyright:   (c) 2017
-# Licence:     <your licence>
+# Copyright:   (c) 2019 TK
+# Licence:     MIT
 #-------------------------------------------------------------------------------
 from multiprocessing import cpu_count
 import os
@@ -17,8 +12,8 @@ import sys
 PROGRAM_NAME = 'Ruuvi Gateway'
 LONG_PROGRAM_NAME = 'Ruuvi InfluxDB/MQTT Gateway'
 PROGRAM_PY = 'ruuvigw.py'
-VERSION = '2.5.5 (191110)'
-PROGRAM_COPYRIGHT = '(c) TK'
+VERSION = '3.1.3 (191119)'
+PROGRAM_COPYRIGHT = '(c) TK 2019'
 
 CFGFILE = 'ruuvigw.json'
 if not sys.platform.startswith('linux') or os.environ.get('CI') == 'True': 
@@ -30,36 +25,97 @@ print (f'### DEFAULT LOG CONFIG FILE:{LOG_CFGFILE}')
 
 SEPARATOR_LENGTH = 70
 # COMMON
-COMMON_START_DELAY = 2.0
-COMMON_DOCKER_ENV = False
-COMMON_SCHEDULER_MAXINSTANCES = 10
-COMMON_NAMESERVERS = None
-COMMON_HOSTNAME = None 
+COMMON_SCHEDULER_INSTANCES = 10
+COMMON_NAMESERVERS = []
+COMMON_HOSTNAME = '' 
 # INFLUX
 INFLUX_ENABLE = True
 INFLUX_NAME = 'influx_default'
-INFLUX_LOAD_BALANCER = False
-INFLUX_WORKERS = cpu_count()
 INFLUX_SUPERVISION_INTERVAL = 20
-INFLUX_HOST = 'localhost'
+INFLUX_HOST = ''
 INFLUX_PORT = 8086
 INFLUX_SSL = False 
 INFLUX_SSL_VERIFY = True 
 INFLUX_USERNAME = ''
 INFLUX_PASSWORD = ''
-INFLUX_DATABASE = '_default' 
+INFLUX_DATABASE = '' 
 INFLUX_TIMEOUT = 2.0 
 INFLUX_RETRIES = 2
+INFLUX_POLICY_NAME = '_default'
+INFLUX_POLICY_DURATION = '365d'
+INFLUX_POLICY_REPLICATION = 1
+INFLUX_POLICY_DEFAULT = False
+INFLUX_POLICY_ALTER = False
 INFLUX_POLICY = {
-    "name": "_default",
-    "duration": "365d",
-    "replication": 1,
-    "default": False,
-    "alter": False
+    "name": INFLUX_POLICY_NAME,
+    "duration": INFLUX_POLICY_DURATION,
+    "replication": INFLUX_POLICY_REPLICATION,
+    "default": INFLUX_POLICY_DEFAULT,
+    "alter": INFLUX_POLICY_ALTER
     }
 INFLUX_QUEUE_SIZE = 100
+
+# MQTT
+MQTT_ENABLE = True
+MQTT_DEBUG = False
+MQTT_TOPIC = 'test'
+# MQTT_ADTOPIC = None
+# MQTT_ANNTOPIC = None
+MQTT_NAME = ''
+MQTT_HOST = 'localhost'
+MQTT_PORT = 1883
+MQTT_SSLPORT = 8883
+MQTT_SSL = False
+MQTT_SSL_INSECURE = False
+MQTT_CERT_VERIFY = True
+MQTT_KEEPALIVE = 15
+MQTT_CLIENT_ID = 'mqtt'
+# MQTT_CAFILE = ''
+# MQTT_CAPATH = ''
+# MQTT_CADATA = ''
+MQTT_LWT= False
+MQTT_LWTTOPIC = 'lwt'
+MQTT_LWTOFFLINE = 'offline'
+MQTT_LWTONLINE = 'online'
+MQTT_LWTRETAIN = False
+MQTT_LWTQOS = 1
+MQTT_LWTPERIOD = 60
+MQTT_USERNAME = ''
+MQTT_PASSWORD = ''
+MQTT_QOS = 1
+MQTT_RETAIN = False
+MQTT_CLEAN_SESSION = False
+MQTT_ADQOS = 1
+MQTT_ADRETAIN = False
+MQTT_ANNQOS = 1
+MQTT_SUPERVISION_INTERVAL = 10
+MQTT_QUEUE_SIZE = 100
+MQTT_ONLYNEWEST = True
+MQTT_ADFIELDS = {
+    "temperature": {
+        "unit_of_meas": "C",
+        "dev_cla": "temperature",
+        "val_tpl": "{{ value_json.temperature | float | round(1) }}"
+    },
+    "humidity": {
+        "unit_of_meas": "%",
+        "dev_cla": "humidity",
+        "val_tpl": "{{ value_json.humidity | float | round(1) }}"
+    },
+    "pressure": {
+        "unit_of_meas": "hPa",
+        "dev_cla": "pressure",
+        "val_tpl": "{{ value_json.pressure | float | round(1) }}"
+    },
+    "batteryVoltage": {
+        "unit_of_meas": "V",
+        "dev_cla": "battery",
+        "val_tpl": "{{ value_json.batteryVoltage | float / 1000 | round(3) }}"
+    }
+}
+
 # RUUVI
-RUUVI_NAME = 'ruuvi_default'
+RUUVI_NAME = 'ruuvi'
 RUUVI_CALCS = False 
 RUUVI_TIMEFMT = '%Y-%m-%dT%H:%M:%S.%f%z'
 RUUVI_MAX_INTERVAL = 60
@@ -104,12 +160,14 @@ RUUVI_OUTPUT = [
 ]
 
 # RUUVITAG
-RUUVITAG_NAME = 'ruuvitag_default'
-RUUVITAG_RUUVINAME = 'ruuvi_default'
+RUUVITAG_NAME = 'ruuvitag'
+RUUVITAG_RUUVINAME = 'ruuvi'
+RUUVITAG_COLLECTOR = 'socket'
+RUUVITAG_DEVICE = 'hci0'
 RUUVITAG_TIMEFMT = RUUVI_TIMEFMT
 RUUVITAG_SAMPLE_INTERVAL = 1000
 RUUVITAG_CALC = False
-RUUVITAG_CALC_IN_DATAS = True
+RUUVITAG_CALC_IN_DATAS = False
 RUUVITAG_DEBUG = False
 RUUVITAG_DEVICE_TIMEOUT = 10000
 RUUVITAG_SUDO = False
@@ -129,57 +187,3 @@ RUUVITAG_MINMAX = {
         "max": 1100
     }
 }
-
-# MQTT
-MQTT_ENABLE = True
-MQTT_DEBUG = False
-MQTT_TOPIC = None
-MQTT_ADTOPIC = None
-MQTT_ANNTOPIC = None
-MQTT_NAME = None
-MQTT_HOST = None
-MQTT_CHECK_HOSTNAME = True 
-MQTT_CLIENT_ID = 'mqtt'
-MQTT_CAFILE = ''
-MQTT_CAPATH = ''
-MQTT_CADATA = ''
-MQTT_LWT= False
-MQTT_LWTTOPIC = None
-MQTT_LWTMESSAGE = 'offline'
-MQTT_LWTONLINE = 'online'
-MQTT_LWTRETAIN = True
-MQTT_LWTQOS = 1
-MQTT_USERNAME = ''
-MQTT_PASSWORD = ''
-MQTT_QOS = 2
-MQTT_RETAIN = False
-MQTT_ADRETAIN = False
-MQTT_TIMEOUT = 2.0 
-MQTT_RETRIES = 2
-MQTT_SUPERVISION_INTERVAL = 10
-MQTT_QUEUE_SIZE = 100
-MQTT_ONLYNEWEST = True
-MQTT_ADFIELDS = {
-    "temperature": {
-        "unit_of_meas": "C",
-        "dev_cla": "temperature",
-        "val_tpl": "{{ value_json.temperature | float | round(1) }}"
-    },
-    "humidity": {
-        "unit_of_meas": "%",
-        "dev_cla": "humidity",
-        "val_tpl": "{{ value_json.humidity | float | round(1) }}"
-    },
-    "pressure": {
-        "unit_of_meas": "hPa",
-        "dev_cla": "pressure",
-        "val_tpl": "{{ value_json.pressure | float | round(1) }}"
-    },
-    "batteryVoltage": {
-        "unit_of_meas": "V",
-        "dev_cla": "battery",
-        "val_tpl": "{{ value_json.batteryVoltage | float / 1000 | round(3) }}"
-    }
-}
-
-

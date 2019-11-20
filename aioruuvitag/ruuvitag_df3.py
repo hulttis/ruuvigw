@@ -1,19 +1,19 @@
 # coding=utf-8
 # !/usr/bin/python3
 # Name:         ruuvitag df3 - formating dataformat 3
-#
-# Author:       Timo Koponen
-#
-# Created:      18.03.2019
-# Copyright:    (c) 2019
-# Licence:      Do not distribute
-#
+# Copyright:    (c) 2019 TK
+# Licence:      MIT
+
 # data format:  https://github.com/ruuvi/ruuvi-sensor-protocols
 # -------------------------------------------------------------------------------
 import logging
-logger = logging.getLogger('aioruuvitag_ble')
+logger = logging.getLogger('ruuvitag')
 
 import math
+from .ruuvitag_misc import (
+    twos_complement,
+    rshift
+)
 
 _DF = 3
 ROUND_TEMPERATURE = 2
@@ -22,12 +22,6 @@ ROUND_PRESSURE = 2
 ROUND_VOLTAGE = 2
 ROUND_TXPOWER = 0
 ROUND_ACCELERATION = 3
-
-# -------------------------------------------------------------------------------
-def twos_complement(val, bits):
-    if (val & (1 << (bits - 1))) != 0:
-        val = val - (1 << bits)
-    return val
 
 # -------------------------------------------------------------------------------
 class ruuvitag_df3(object):
@@ -127,7 +121,7 @@ class ruuvitag_df3(object):
     def decode(self, *, tagdata, minmax):
         try:
             l_bytedata = bytearray.fromhex(tagdata)
-            if len(l_bytedata) >= self.DATALEN:
+            if len(l_bytedata) >= ruuvitag_df3.DATALEN:
                 l_acc_x, l_acc_y, l_acc_z = self._acceleration(bytedata=l_bytedata)
                 return {
                     '_df': _DF,

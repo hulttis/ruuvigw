@@ -32,7 +32,7 @@
     {
       "enable": true,
       "name": "mqtt102",
-      "host": "mqtt://mqtt:passwd@mqtt102:1883",
+      "uri": "mqtt://mqtt:passwd@mqtt102:1883",
       "topic": "tst1/ha/ruuvi",
       "retain": false,
       "adtopic": "tst1/homeassistant/sensor/ruuvi",
@@ -43,24 +43,30 @@
     },
     {
       "enable": true,
+      "client_id": "p50win10",
       "name": "mqtts102",
-      "host": "mqtts://mqtt:passwd@mqtt102:8883",
+      "host": "mqtt102",
+      "port": 8883,
+      "ssl": true,
+      "ssl_insecure": false,
+      "cafile": "./certs/ca.crt",
+      "cert_verify": true,
+      "username": "mqtt",
+      "password": "passwd",
       "topic": "tst2/ha/ruuvi",
       "retain": false,
       "adtopic": "tst2/homeassistant/sensor/ruuvi",
       "adretain": true,
       "anntopic": "tst2/ha/ruuvi/announce",
       "qos": 1,
-      "cafile": "./certs/ca.crt",
-      "check_hostname": false
+      "lwt": true,
+      "keepalive": 10
     }
   ],
   "RUUVITAG": {
-    "name": "ruuvitag",
-    "ruuviname": "ruuvi",
     "sample_interval": 1000,
     "device_timeout": 10000,
-    "sudo": true,
+    "sudo": false,
     "whtlist_from_tags": true,
     "TAGS": {
       "C4:E4:4D:4C:8D:6F": "100outsideback",
@@ -82,7 +88,6 @@
     ]
   },
   "RUUVI": {
-    "name": "ruuvi",
     "max_interval": 60,
     "MEASUREMENTS": [
       {

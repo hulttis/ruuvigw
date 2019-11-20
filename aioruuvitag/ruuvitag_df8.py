@@ -1,50 +1,51 @@
 # coding=utf-8
 # !/usr/bin/python3
-# Name:         ruuvitag df5 - formating dataformat 5
+# Name:         ruuvitag df8 - formating dataformat 8
 # Copyright:    (c) 2019 TK
 # Licence:      MIT
 #
 # data format:  https://github.com/ruuvi/ruuvi-sensor-protocols
-# rawdata 043E2B02010301B4DA2618D7CB1F0201061BFF99040516EC5238C574FCE4FD8CFFEC99769A6221CBD71826DAB4BC
-#                                                   --------------------------------------------------
-# 05            data format         0
-# 16EC          temperature         1
-# 5238          humidity            3
-# C574          pressure            5
-# FCE4          acceleration x      7
-# FD8C          acceleration y      9
-# FFEC          acceleration z      11
-# 9976          power info          13
-# 9A            movement counter    15
-# 6221          sequence number     16
-# CBD71826DAB4  mac                 18
-# BC            rssi                24
+# 
+# data format         0         
+# temperature         1-2       -32767 ... 32767    0.005 degrees
+# humidity            3-4       0 ... 40000         0.0025% (0...163.83)
+# pressure            5-6       0 ... 65535         1Pa (offset -50000)
+# power info          7-8       
+# movement counter    9-10      0 ... 65534
+# sequence number     11-12     0 ... 65534
+# reserved            13-16     reserved for future use
+# crc                 17        CRC8
+# mac                 18-23     48bit MAC address        
+# rssi                24        -127 ... 127 last byte of the data stream
+#
+# TODO: NOT YET IMPLEMENTED
 # -------------------------------------------------------------------------------
 import logging
 logger = logging.getLogger('ruuvitag')
 
 import math
+
 from .ruuvitag_misc import (
     twos_complement,
     rshift
 )
 
-_DF = 5
+_DF = 8
 ROUND_TEMPERATURE = 3
 ROUND_HUMIDITY = 4
 ROUND_PRESSURE = 2
 ROUND_VOLTAGE = 3
 ROUND_TXPOWER = 0
-ROUND_ACCELERATION = 3
 
 # -------------------------------------------------------------------------------
-class ruuvitag_df5(object):
-    DATAFORMAT = 'FF990405'
+class ruuvitag_df8(object):
+    DATAFORMAT = 'FF990408'
     DATALEN = 24
+    PASSWORD = 0x5275757669636f6d5275757669546167   # "RuuvicomRuuviTag"
 
 # -------------------------------------------------------------------------------
     def _temperature(self, *, bytedata, minmax):
-        """ Temperature in celcius: -163.840 °C to +163.830 °C in 0.005 °C increments """
+        """ Temperature in 0.005 degrees. """
         if bytedata[1:2] == 0x7FFF:
             return None
 
@@ -68,7 +69,7 @@ class ruuvitag_df5(object):
 
 # -------------------------------------------------------------------------------
     def _humidity(self, *, bytedata, minmax):
-        """ Humidity in %: 0.0 % to 100 % in 0.0025 % increments. """
+        """ Humidity (16bit unsigned) in 0.0025% (0-163.83% range, though realistically 0-100%). """
         if bytedata[3:4] == 0xFFFF:
             return None
 
@@ -92,7 +93,7 @@ class ruuvitag_df5(object):
 
 # -------------------------------------------------------------------------------
     def _pressure(self, *, bytedata, minmax):
-        """ Atmospheric Pressure in hPa; 500 hPa to 1155.36 hPa in 0.01 hPa increments """
+        """ Pressure (16bit unsigned) in 1 Pa units, with offset of -50 000 Pa. """
         if bytedata[5:6] == 0xFFFF:
             return None
 
@@ -116,26 +117,13 @@ class ruuvitag_df5(object):
         return round(l_pressure, ROUND_PRESSURE)
 
 # -------------------------------------------------------------------------------
-    def _acceleration(self, *, bytedata):
-        """ Acceleration in mG's: -32000 to 32000 (mG), however the sensor on RuuviTag supports only 16 G max (2 G in default configuration) """
-        if (bytedata[7:8] == 0x7FFF or
-                bytedata[9:10] == 0x7FFF or
-                bytedata[11:12] == 0x7FFF):
-            return (None, None, None)
-
-        l_acc_x = round(twos_complement((bytedata[7] << 8) + bytedata[8], 16), ROUND_ACCELERATION)
-        l_acc_y = round(twos_complement((bytedata[9] << 8) + bytedata[10], 16), ROUND_ACCELERATION)
-        l_acc_z = round(twos_complement((bytedata[11] << 8) + bytedata[12], 16), ROUND_ACCELERATION)
-        return (l_acc_x, l_acc_y, l_acc_z)
-
-# -------------------------------------------------------------------------------
     def _powerinfo(self, *, bytedata):
         """
-        Power info (11+5bit unsigned), first 11bits unsigned is the battery voltage above 1.6V, 
-        in millivolts (1.6V to 3.647V range). last 5 bits unsigned is the TX power above -40dBm, 
-        in 2dBm steps. (-40dBm to +24dBm range)        
+        Power info (11+5bit unsigned), first 11 bits is the battery voltage above 1.6V, 
+        in millivolts (1.6V to 3.646V range). Last 5 bits unsigned are the TX power above -40dBm, 
+        in 2dBm steps. (-40dBm to +20dBm range).        
         """
-        l_power_info = (bytedata[13] & 0xFF) << 8 | (bytedata[14] & 0xFF)
+        l_power_info = (bytedata[7] & 0xFF) << 8 | (bytedata[8] & 0xFF)
         l_battery_voltage = rshift(l_power_info, 5) + 1600
         l_tx_power = (l_power_info & 0b11111) * 2 - 40
 
@@ -158,8 +146,8 @@ class ruuvitag_df5(object):
 
 # -------------------------------------------------------------------------------
     def _movementcounter(self, *, bytedata):
-        """ Movement counter (8bit unsigned), incremented by motion detection interrupts from LIS2DH12 """
-        return bytedata[15] & 0xFF
+        """ Movement counter (16 bit unsigned), incremented by motion detection interrupts from accelerometer """
+        return (bytedata[9] & 0xFF) << 8 | bytedata[10] & 0xFF
 
 # -------------------------------------------------------------------------------
     def _sequencenumber(self, *, bytedata):
@@ -167,7 +155,12 @@ class ruuvitag_df5(object):
         this is incremented by one, used for measurement de-duplication (depending on the transmit interval, 
         multiple packets with the same measurements can be sent, and there may be measurements that never were sent)
         """
-        return (bytedata[16] & 0xFF) << 8 | bytedata[17] & 0xFF
+        return (bytedata[11] & 0xFF) << 8 | bytedata[12] & 0xFF
+
+# -------------------------------------------------------------------------------
+    def _crc(self, *, bytedata):
+        """ CRC8, used to check for correct decryption """
+        return bytedata[17] & 0xFF
 
 # -------------------------------------------------------------------------------
     def _tagid(self, *, bytedata):
@@ -187,17 +180,12 @@ class ruuvitag_df5(object):
     def decode(self, *, tagdata, minmax):
         try:
             l_bytedata = bytearray.fromhex(tagdata)
-            if len(l_bytedata) >= ruuvitag_df5.DATALEN:
-                l_acc_x, l_acc_y, l_acc_z = self._acceleration(bytedata=l_bytedata)
+            if len(l_bytedata) >= ruuvitag_df8.DATALEN:
                 return {
                     '_df': _DF,
                     'humidity': self._humidity(bytedata=l_bytedata, minmax=minmax.get('humidity', None)),
                     'temperature': self._temperature(bytedata=l_bytedata, minmax=minmax.get('temperature', None)),
                     'pressure': self._pressure(bytedata=l_bytedata, minmax=minmax.get('pressure', None)),
-                    'acceleration': round(math.sqrt(l_acc_x * l_acc_x + l_acc_y * l_acc_y + l_acc_z * l_acc_z), ROUND_ACCELERATION),
-                    'acceleration_x': l_acc_x,
-                    'acceleration_y': l_acc_y,
-                    'acceleration_z': l_acc_z,
                     'tx_power': self._txpower(bytedata=l_bytedata),
                     'battery': self._battery(bytedata=l_bytedata),
                     'movement_counter': self._movementcounter(bytedata=l_bytedata),

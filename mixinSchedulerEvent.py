@@ -1,5 +1,11 @@
+# coding=utf-8
+# !/usr/bin/python3
+# Name:         mixinSchedulerEvent
+# Copyright:   (c) 2019 TK
+# Licence:     MIT
+# -------------------------------------------------------------------------------
 import logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('mixin')
 
 import apscheduler.events as _SchedulerEvents
 

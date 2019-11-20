@@ -1,3 +1,10 @@
+# coding=utf-8
+#-------------------------------------------------------------------------------
+# Name:        ruuvi_dataclasses.py
+# Purpose:     dataclasses
+# Copyright:   (c) 2019 TK
+# Licence:     MIT
+#-------------------------------------------------------------------------------
 from dataclasses import dataclass, field
 from multiprocessing import Process, Queue
 from asyncio import Task

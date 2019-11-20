@@ -1,17 +1,12 @@
 # coding=utf-8
 #-------------------------------------------------------------------------------
 # Name:        ruuvi_client.py
-# Purpose:     ruuvi ble
-#
-# Author:      Timo Koponen
-#
-# Created:     09/02/2019
-# modified:    09/02/2019
-# Copyright:   (c) 2017
-# Licence:     <your licence>
+# Purpose:     ruuvi client
+# Copyright:   (c) 2019 TK
+# Licence:     MIT
 #-------------------------------------------------------------------------------
 import logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('ruuvi')
 
 import asyncio
 
@@ -39,11 +34,19 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         loop,
         scheduler
     ):
+        """
+            cfg - ruuvi configuration
+            hostname - name of the system
+            outqueues - list of queues for outgoing data (influx(s) / mqtt(s))
+            inqueue - incoming queue for data (ruuvitag)
+            loop - asyncio loop
+            scheduler - used scheduler for scheduled tasks
+        """
         super().__init__()
 
         if not cfg:
-           logger.error('cfg is None')
-           raise ValueError('cfg cannot be None')
+           logger.error('cfg is required parameter and cannot be None')
+           raise ValueError('cfg is required parameter and cannot be None')
 
         self._name = cfg.get('name', _def.RUUVI_NAME)
         logger.debug(f'{self._name } enter')
@@ -53,13 +56,13 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         self._write_lastdata_cnt = int(self._cfg.get('write_lastdata_cnt', _def.RUUVI_WRITE_LASTDATA_CNT))
         if self._write_lastdata_int:
             self._write_lastdata_int = max(self._write_lastdata_int, (self._max_interval+_def.RUUVI_WRITE_LASTDATA_DIFF))
-            logger.info(f'{self._name} write_lastdata_int:{int(self._write_lastdata_int)}s')
+            logger.debug(f'{self._name} write_lastdata_int:{int(self._write_lastdata_int)}s')
             if self._write_lastdata_cnt:
-                logger.info(f'{self._name} write_lastdata_cnt:{int(self._write_lastdata_cnt)}')
+                logger.debug(f'{self._name} write_lastdata_cnt:{int(self._write_lastdata_cnt)}')
             else:
-                logger.info(f'{self._name} write_lastdata_cnt unlimited')
+                logger.debug(f'{self._name} write_lastdata_cnt unlimited')
         else:
-            logger.info(f'{self._name} write lastdata disabled')
+            logger.debug(f'{self._name} write lastdata disabled')
 
         self._meas = cfg.get('MEASUREMENTS', [])
         logger.debug(f'{self._name} measurements:{self._meas}')
@@ -79,14 +82,17 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
 
         logger.debug(f'{self._name} exit')
 
+# -------------------------------------------------------------------------------
+    def __del__(self):
+        self.shutdown()
+
 #-------------------------------------------------------------------------------
     def shutdown(self):
-        logger.warning(f'{self._name}')
         self._stop_event.set()
 
 #-------------------------------------------------------------------------------
     def _schedule(self, *, scheduler):
-        logger.info(f'{self._name} enter {type(scheduler)}')
+        logger.debug(f'{self._name} enter {type(scheduler)}')
 
         if self._write_lastdata_int:
             try:
@@ -107,7 +113,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
 
 #-------------------------------------------------------------------------------
     async def run(self):
-        logger.info(f'{self._name} enter hostname:{self._hostname}')
+        logger.info(f'{self._name} start')
 
         l_json = None
         if self._inqueue:
@@ -118,18 +124,18 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
                 except asyncio.CancelledError:
                     logger.warning(f'{self._name} CanceledError')
                 except GeneratorExit:
-                    logger.error(f'GeneratorExit')
+                    logger.warning(f'GeneratorExit')
                 except Exception:
                     logger.exception(f'*** {self._name}')
                     continue
         else:
             logger.critical(f'{self._name} FAILED TO START. NO QUEUE')
 
-        for l_mea in self._cnt:
-            for l_mac in self._cnt[l_mea]:
-                logger.info(f'{self._name} {l_mea} {l_mac} cnt:{self._cnt[l_mea][l_mac]}')
+        # for l_mea in self._cnt:
+        #     for l_mac in self._cnt[l_mea]:
+        #         logger.info(f'{self._name} {l_mea} {l_mac} cnt:{self._cnt[l_mea][l_mac]}')
 
-        logger.warning(f'{self._name} exit')
+        logger.info(f'{self._name} done')
         return True
 
 #-------------------------------------------------------------------------------
@@ -180,7 +186,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         scheduled task
         """
         l_now = time.time()
-        logger.debug(f'{self._name}')
+        # logger.debug(f'{self._name}')
 
         if self._write_lastdata_int:
             try:
@@ -203,11 +209,10 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
                                 })
                                 await self._update_lastdata(measur=l_measur, mac=l_mac, xtime=(l_lasttime + self._write_lastdata_int), datas=l_datas, reason='lastdata', xcnt=(l_xcnt+1)) # ycnt=0
                                 await self._queue_output(measur=l_measur, datas=l_fdata)
-                                logger.info(f'{self._name} {l_measurname} {l_mac} {l_tagname} cnt:{l_xcnt}')
-                                logger.debug(f'{self._name} {l_measurname} {l_mac} {l_tagname} data:{l_fdata}')
+                                logger.debug(f'{self._name} {l_measurname} {l_mac} {l_tagname} cnt:{l_xcnt} data:{l_fdata}')
                             elif self._write_lastdata_cnt and l_xcnt >= self._write_lastdata_cnt:
                                 await self._remove_lastdata(measur=l_measur, mac=l_mac) 
-                                logger.info(f'{self._name} {l_measurname} {l_mac} {l_tagname} write_lastdata_cnt:{self._write_lastdata_cnt} reached')
+                                logger.debug(f'{self._name} {l_measurname} {l_mac} {l_tagname} write_lastdata_cnt:{self._write_lastdata_cnt} reached')
             except Exception:
                 logger.exception(f'*** {self._name}')
             
@@ -225,7 +230,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
                     if abs(l_newvalue - l_oldvalue) < delta:
                         return False
                     else:
-                        logger.info(f'{self._name} {l_measurname} {mac} {l_tagname:20s} {field:17s} old:{l_oldvalue:.2f} new:{l_newvalue:.2f} diff:{abs(l_newvalue-l_oldvalue):.2f} delta:{delta:.2f}')
+                        logger.debug(f'{self._name} {l_measurname} {mac} {l_tagname:20s} {field:17s} old:{l_oldvalue:.2f} new:{l_newvalue:.2f} diff:{abs(l_newvalue-l_oldvalue):.2f} delta:{delta:.2f}')
         except:
             logger.exception(f'*** {self._name}')
 
@@ -337,7 +342,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         if len(l_fields):
             l_fields['time'] = datas['time'] if ('time' in datas) else _dt.utcnow().strftime(_def.RUUVI_TIMEFMT)
         else:
-            logger.warning(f'{self._name} {l_measurname} {mac} {l_tagname} fields empty')
+            logger.debug(f'{self._name} {l_measurname} {mac} {l_tagname} fields empty')
 
         logger.debug(f'{self._name} {l_measurname} {mac} {l_tagname} fields:{l_fields}')
         return (l_fields)

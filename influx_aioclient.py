@@ -1,17 +1,12 @@
 # coding=utf-8
 #-------------------------------------------------------------------------------
 # Name:        influx_aioclient.py
-# Purpose:     influxdb
-#
-# Author:      Timo Koponen
-#
-# Created:     10/10/2017
-# modified:    14/01/2019
-# Copyright:   (c) 2017
-# Licence:     <your licence>
+# Purpose:     generic influx client
+# Copyright:   (c) 2019 TK
+# Licence:     MIT
 #-------------------------------------------------------------------------------
 import logging
-logger = logging.getLogger(__name__)
+logger = logging.getLogger('influx')
 
 import asyncio
 import aiohttp
@@ -42,6 +37,13 @@ class influx_aioclient(_mixinQueue):
         scheduler,
         nameservers=None
     ):
+        """
+            cfg - influx configuration
+            inqueue - incoming queue for data
+            loop - asyncio loop
+            scheduler - used scheduler for scheduled tasks
+            nameservers - list of used name servers
+        """
         super().__init__()
         self._funcs = {
             'default':        self._execute_default,
@@ -50,11 +52,11 @@ class influx_aioclient(_mixinQueue):
         }
 
         if not cfg:
-           logger.error('cfg None')
-           raise ValueError('cfg cannot be None')
+           logger.error('cfg is required parameter and cannot be None')
+           raise ValueError('cfg is required parameter and cannot be None')
         if not inqueue:
-           logger.error('inqueue None')
-           raise ValueError('inqueue cannot be None')
+           logger.error('inqueue is required parameter and cannot be None')
+           raise ValueError('inqueue is required parameter and cannot be None')
 
         self._name = cfg.get('name', _def.INFLUX_NAME)
         logger.debug(f'{self._name} enter')
@@ -77,14 +79,17 @@ class influx_aioclient(_mixinQueue):
         self._nameservers = nameservers
         logger.debug(f'{self._name} exit')
 
+# -------------------------------------------------------------------------------
+    def __del__(self):
+        self.shutdown()
+        
 #-------------------------------------------------------------------------------
     def shutdown(self):
-        logger.warning(f'{self._name}')
         self._stop_event.set()
 
 #-------------------------------------------------------------------------------
     def _schedule(self, *, scheduler):
-        logger.info(f'{self._name} enter {type(scheduler)}')
+        logger.debug(f'{self._name} enter {type(scheduler)}')
 
         try:
             l_jobid = f'{self._name}_do_connect'
@@ -107,7 +112,7 @@ class influx_aioclient(_mixinQueue):
 
 #-------------------------------------------------------------------------------
     async def run(self):
-        logger.info(f'{self._name} enter')
+        logger.info(f'{self._name} start')
 
         # self.start_event.set()
         while not self._stop_event.is_set():
@@ -135,17 +140,17 @@ class influx_aioclient(_mixinQueue):
             except asyncio.CancelledError:
                 logger.warning(f'{self._name} CanceledError')
             except GeneratorExit:
-                logger.error(f'GeneratorExit')
+                logger.warning(f'GeneratorExit')
             except Exception:
                 logger.exception(f'*** {self._name}')
 
         if self._dbcon:
-            logger.warning(f'{self._name} closing influx connection')
+            logger.info(f'{self._name} closing')
             await self._dbcon.close()
 
-        logger.warning(f'{self._name} exit')
+        logger.info(f'{self._name} done')
 
-        return (True)
+        return True
 
 #-------------------------------------------------------------------------------
     async def _do_connect(self, *, cfg, jobid):
@@ -352,26 +357,27 @@ class influx_aioclient(_mixinQueue):
         l_dblist = []
         for l_value in l_resp['results'][0]['series'][0]['values']:
             l_dblist.append(l_value[0])
-        logger.info(f'{self._name} dblist:{l_dblist}')
+        logger.debug(f'{self._name} dblist:{l_dblist}')
 
         if l_db in l_dblist:
-            logger.info(f'{self._name} database {l_db} exists')
+            logger.info(f'{self._name} database:{l_db} exists')
             return True
 
         l_resp = await self._query(con=con, query=f'CREATE DATABASE {l_db}')
         if not l_resp:
+            logger.error(f'{self._name} failed to create database:{l_db}')
             return False
 
-        logger.info(f'{self._name} database {l_db} created')
+        logger.info(f'{self._name} database:{l_db} created')
         return True
 
 #-------------------------------------------------------------------------------
     async def _createpolicy(self, *, con, cfg):
         logger.debug(f'{self._name}')
 
-        l_policy = cfg.get('POLICY', None)
+        l_policy = cfg.get('POLICY', _def.INFLUX_POLICY)
         if not l_policy:
-            logger.error(f'{self._name} POLICY not defined for INFLUX')
+            logger.error(f'{self._name} POLICY not defined')
             return (False)
 
         con.db = cfg.get('database', _def.INFLUX_DATABASE)
@@ -383,7 +389,7 @@ class influx_aioclient(_mixinQueue):
         l_rplist = []
         for _, l_value in enumerate(l_resp['results'][0]['series'][0]['values']):
             l_rplist.append(l_value[0])
-        logger.info(f'{self._name} rplist:{l_rplist}')
+        logger.debug(f'{self._name} rplist:{l_rplist}')
 
         if l_policyname not in l_rplist:  # create
             l_q = 'CREATE RETENTION POLICY {0} ON {1} DURATION {2} REPLICATION {3}'.format(
@@ -396,8 +402,9 @@ class influx_aioclient(_mixinQueue):
                 l_q += ' DEFAULT'
             l_resp = await self._query(con=con, query=l_q)
             if not l_resp:
+                logger.error(f'{self._name} failed to create policy:{l_policyname}')
                 return False
-            logger.info(f'{self._name} retention policy {l_policyname} created')
+            logger.info(f'{self._name} retention policy:{l_policyname} created')
         elif l_policy.get('alter', _def.INFLUX_POLICY_ALTER):   # alter existing policy
             l_q = 'ALTER RETENTION POLICY {0} ON {1} DURATION {2} REPLICATION {3}'.format(
                 l_policyname,
@@ -409,14 +416,17 @@ class influx_aioclient(_mixinQueue):
                 l_q += ' DEFAULT'
             l_resp = await self._query(con=con, query=l_q)
             if not l_resp:
+                logger.error(f'{self._name} failed to alter policy:{l_policyname}')
                 return False
-            logger.info(f'{self._name} retention policy {l_policyname} altered')
+            logger.info(f'{self._name} retention policy:{l_policyname} altered')
+        else:
+            logger.info(f'{self._name} retention policy:{l_policyname} exists')
 
         return True
 
 #-------------------------------------------------------------------------------
     async def _execute_default(self, *, item):
-        logger.warning(f'{self._name} item: {item}')
+        logger.error(f'{self._name} item: {item}')
 
 #-------------------------------------------------------------------------------
     async def _execute_json(self, *, item):
@@ -436,7 +446,7 @@ class influx_aioclient(_mixinQueue):
             l_jobid = item.get('jobid', None)
             if self._dbcon and l_json:
                 if item.get('resend', None):
-                    logger.info(f'{self._name} jobid:{l_jobid} resending item:{item}')
+                    logger.debug(f'{self._name} jobid:{l_jobid} resending item:{item}')
                 # await self._dbcon.write(data=l_json, precision='s', rp=self._policy_name)
                 await self._dbcon.write(data=l_json, rp=self._policy_name)
                 logger.debug(f'{self._name} jobid:{l_jobid}')
@@ -465,7 +475,7 @@ class influx_aioclient(_mixinQueue):
         finally:
             if l_reconnect: # reconnect needed
                 if self._dbcon:
-                    logger.warning(f'{self._name} jobid:{l_jobid} disconnect influx')
+                    logger.warning(f'{self._name} jobid:{l_jobid} disconnect')
                     await self._dbcon.close()
                     self._dbcon = None
                 self._dbcon_reconnect = True
@@ -474,7 +484,6 @@ class influx_aioclient(_mixinQueue):
                 if self._inqueue:
                     item['resend'] = True
                     await self.queue_put(outqueue=self._inqueue, data=item)
-                    logger.warning(f'{self._name} jobid:{l_jobid} rebuffer')
                     logger.debug(f'{self._name} jobid:{l_jobid} rebuffer data:{item}')
 
         return False

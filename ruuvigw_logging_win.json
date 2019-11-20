@@ -38,56 +38,38 @@
             "backupCount": 10,
             "encoding": "utf8" 
         },
-        "ruuvi_aioclient_fh": {
+        "ruuvi_fh": {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "_ruuvi_aioclient.log",
+            "filename": "_ruuvi.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 
         },
-        "influx_aioclient_fh": {
+        "influx_fh": {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "_influx_aioclient.log",
+            "filename": "_influx.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 
         },
-        "mqtt_aioclient_fh": {
+        "mqtt_fh": {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "_mqtt_aioclient.log",
+            "filename": "_mqtt.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 
         },
-        "ruuvi_influx_fh": {
+        "ruuvitag_fh": {
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "_ruuvi_influx.log",
-            "maxBytes": 10485760,
-            "backupCount": 10,
-            "encoding": "utf8" 
-        },
-        "ruuvi_mqtt_fh": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "level": "DEBUG",
-            "formatter": "basic",
-            "filename": "_ruuvi_mqtt.log",
-            "maxBytes": 10485760,
-            "backupCount": 10,
-            "encoding": "utf8" 
-        },
-        "aioruuvitag_fh": {
-            "class": "logging.handlers.RotatingFileHandler",
-            "level": "DEBUG",
-            "formatter": "basic",
-            "filename": "_aioruuvitag.log",
+            "filename": "_ruuvitag.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 
@@ -101,46 +83,41 @@
 
     "loggers": {
         "__main__": {
-            "level": "INFO",
+            "level": "DEBUG",
             "handlers": ["console"],
             "propagate": false
         },
         "ruuvigw": {
-            "level": "DEBUG",
+            "level": "INFO",
             "handlers": ["ruuvigw_fh"],
             "propagate": true
         },
-        "ruuvi_aioclient": {
-            "level": "DEBUG",
-            "handlers": ["ruuvi_aioclient_fh"],
-            "propagate": true
-        },
-        "influx_aioclient": {
+        "ruuvi": {
             "level": "INFO",
-            "handlers": ["influx_aioclient_fh"],
+            "handlers": ["ruuvi_fh"],
             "propagate": true
         },
-        "mqtt_aioclient": {
-            "level": "DEBUG",
-            "handlers": ["mqtt_aioclient_fh"],
-            "propagate": true
-        },
-        "ruuvi_influx":  {
+        "influx": {
             "level": "INFO",
-            "handlers": ["ruuvi_influx_fh"],
+            "handlers": ["influx_fh"],
             "propagate": true
         },
-        "ruuvi_mqtt":  {
-            "level": "DEBUG",
-            "handlers": ["ruuvi_mqtt_fh"],
-            "propagate": true
-        },
-        "aioruuvitag_ble": {
+        "mqtt": {
             "level": "INFO",
-            "handlers": ["aioruuvitag_fh"],
+            "handlers": ["mqtt_fh"],
             "propagate": true
         },
-        "mixinSchedulerEvent": {
+        "ruuvitag": {
+            "level": "DEBUG",
+            "handlers": ["ruuvitag_fh"],
+            "propagate": true
+        },
+        "config": {
+            "level": "DEBUG",
+            "handlers": ["console"],
+            "propagate": true
+        },
+        "mixin": {
             "level": "WARN",
             "handlers": ["console"],
             "propagate": false
@@ -165,12 +142,7 @@
             "handlers": ["console"],
             "propagate": false
         },
-        "hbmqtt.client": {
-            "level": "DEBUG",
-            "handlers": ["console"],
-            "propagate": false
-        },
-        "transitions.core": {
+        "aiomqtt": {
             "level": "WARN",
             "handlers": ["console"],
             "propagate": false

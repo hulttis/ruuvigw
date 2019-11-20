@@ -9,14 +9,14 @@
   "INFLUX": [
     {
       "enable": true,
-      "name": "influx1",
+      "name": "influx1_min",
       "host": "influxhost1",
       "port": 8086,
       "database": "ruuvi_db1"
     },
     {
       "enable": true,
-      "name": "influx2",
+      "name": "influx2_max",
       "host": "influxhost2",
       "port": 8087,
       "ssl": true,
@@ -38,31 +38,39 @@
   "MQTT": [
     {
       "enable": true,
-      "name": "mqtt1",
-      "client_id": "mqtt-1",
-      "host": "mqtt://user1:passwd1@mqtt1:1883",
+      "name": "mqtt1_min",
+      "host": "mqtt1",
       "topic": "ha/ruuvi",
-      "retain": false,
       "adtopic": "homeassistant/sensor/ruuvi",
-      "adretain": true,
-      "anntopic": "ha/ruuvi/announce",
-      "qos": 1
+      "anntopic": "ha/ruuvi/announce"
     },
     {
       "enable": true,
-      "name": "mqtt2",
-      "client_id": "mqtt-2",
-      "host": "mqtt://user2:passwd2@mqtt2:1883",
+      "name": "mqtt2_max",
+      "client_id": "mqtt2",
+      "host": "mqtt2",
+      "port": 8883,
+      "ssl": true,
+      "ssl_insecure": false,
+      "cafile": "./certs/ca.crt",
+      "cert_verify": true,
+      "username": "mqtt",
+      "password": "passwd",
       "topic": "ha/ruuvi2",
       "retain": false,
+      "qos": 2,
       "adtopic": "homeassistant/sensor/ruuvi2",
       "adretain": true,
+      "adqos": 1,
       "anntopic": "ruuvi2/announce",
+      "annqos": 1,
       "lwt": true,
-      "lwtmessage": "offline",
-      "qos": 1,
-      "cafile": "./certs/ca.crt",
-      "check_hostname": false,
+      "lwttopic": "ha/ruuvi2/lwt",
+      "lwtqos": 1,
+      "lwtretain": false,
+      "lwtperiod": 60,
+      "lwtonline": "online",
+      "lwtoffline": "offline",
       "ADFIELDS": {
         "temperature": {
           "unit_of_meas": "C",
@@ -88,8 +96,7 @@
     }    
   ],
   "RUUVITAG": {
-    "name": "ruuvitag",
-    "ruuviname": "ruuvi",
+    "collector": "hcidump",
     "sample_interval": 1000,
     "device_timeout": 10000,
     "sudo": true,
@@ -114,15 +121,14 @@
     ]
   },
   "RUUVI": {
-    "name": "ruuvi",
     "max_interval": 60,
     "MEASUREMENTS": [
       {
         "name": "ruuvi_int",
         "calcs": true,
         "OUTPUT": [
-          "influx1",
-          "influx2"
+          "influx1_min",
+          "influx2_max"
         ],
         "FIELDS": {
           "temperature": "temperature",
@@ -144,7 +150,8 @@
         "name": "ruuvi_mqtt1",
         "calcs": false,
         "OUTPUT": [
-          "mqtt1"
+          "mqtt1_min",
+          "mqtt2_max"
         ],
         "FIELDS": {
           "temperature": "temperature",

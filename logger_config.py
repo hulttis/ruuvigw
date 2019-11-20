@@ -1,3 +1,10 @@
+# coding=utf-8
+# -------------------------------------------------------------------------------
+# Name:        logger_config.py
+# Purpose:     logger configuration file (json) reader
+# Copyright:   (c) 2019 TK
+# Licence:     MIT
+# -------------------------------------------------------------------------------
 import os
 import json
 import logging.config

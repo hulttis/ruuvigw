@@ -1,18 +1,11 @@
 # coding=utf-8
 # !/usr/bin/python3
 # Name:         ruuvitag calc - calculations
-#
-# Author:       Timo Koponen
-#
-# Created:      18.03.2019
-# Copyright:    (c) 2019
-# Licence:      Do not distribute
-#
-# required:
-#
+# Copyright:    (c) 2019 TK
+# Licence:      MIT
 # -------------------------------------------------------------------------------
 import logging
-logger = logging.getLogger('aioruuvitag_ble')
+logger = logging.getLogger('ruuvitag')
 
 import math
 

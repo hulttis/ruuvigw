@@ -1,26 +1,23 @@
 # coding=utf-8
 # !/usr/bin/python3
 # Name:         ruuvitag_decode - decoding ruuvitag data
-#
-# Author:       Timo Koponen
-#
-# Created:      18.03.2019
-# Copyright:    (c) 2019
-# Licence:      Do not distribute
+# Copyright:    (c) 2019 TK
+# Licence:      MIT
 #
 # Dataformat: https://github.com/ruuvi/ruuvi-sensor-protocols
-#
 # -------------------------------------------------------------------------------
 import logging
-logger = logging.getLogger('aioruuvitag_ble')
+logger = logging.getLogger('ruuvitag')
 
 from .ruuvitag_df3 import ruuvitag_df3 as _df3
 from .ruuvitag_df5 import ruuvitag_df5 as _df5
+from .ruuvitag_df8 import ruuvitag_df8 as _df8
 
 # -------------------------------------------------------------------------------
 class ruuvitag_decode():
     DATAFORMAT_3 = _df3.DATAFORMAT
     DATAFORMAT_5 = _df5.DATAFORMAT
+    DATAFORMAT_8 = _df8.DATAFORMAT
 # -------------------------------------------------------------------------------
     @staticmethod
     def decode(*, rawdata, minmax):
