@@ -187,6 +187,7 @@ NOTE: Instructions are for Python 3.8
 - empty logs (`rm -v /var/log/ruuvigw/*.log`)
 - start ruuvigw (`systemctl start ruuvigw`)
 - check ruuvigw status (`systemctl status ruuvigw`)
+- empty journal if needed (`journalctl --vacuum-time=1s`) - will clear all journals
 - check ruuvigw logs (`journalctl -u ruuvigw -b --no-pager`)
   
 *or if you dare you can use do_upgrade_ruuvigw.sh script on your own risk*
