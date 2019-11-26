@@ -129,11 +129,12 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 ## INSTALLATION
 ### REQUIREMENTS
 - Linux (tested in Ubuntu server 18.04.03 and 2019-09-26-raspbian-buster-lite). **NOT WORKING IN WINDOWS**
-- at least python 3.7.x (recommended 3.8.0)
-- at least pip3.7.x (recommended 3.8.0)
+- at least python 3.7 (recommended 3.8)
+- at least pip3.7 (recommended 3.8)
 - virtualenv (`pip3.8 install --user virtualenv`) - if not installed
 - git (`sudo apt -y install git`)
-- bluez and bluez-hcitool (`sudo apt -y install bluez bluez-hcitool`)
+- python with AF_BLUETOOTH socket support (`python -c "from socket import AF_BLUETOOTH"`)
+- bluez and bluez-hcitool (`sudo apt -y install bluez bluez-hcitool`) if python doesn't support AF_BLUETOOTH
 NOTE: Instructions are for Python 3.8
 
 ### COMPILE PYTHON 3.8.0 FROM SOURCE - FOR AF_BLUETOOTH SOCKET SUPPORT
