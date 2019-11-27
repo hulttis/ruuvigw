@@ -103,7 +103,7 @@
             "propagate": true
         },
         "mqtt": {
-            "level": "INFO",
+            "level": "DEBUG",
             "handlers": ["mqtt_fh"],
             "propagate": true
         },

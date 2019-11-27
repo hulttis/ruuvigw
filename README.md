@@ -1,4 +1,4 @@
-# RUUVI GATEWAY 3.1.3 (191125)
+# RUUVI GATEWAY 3.1.4 (191127)
 This software can be used to collect measurement data from Ruuvitag Bluetooth Low Energy devices https://ruuvi.com/
 
 ## MAIN FUNCTIONALITIES

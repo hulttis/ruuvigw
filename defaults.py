@@ -12,7 +12,7 @@ import sys
 PROGRAM_NAME = 'Ruuvi Gateway'
 LONG_PROGRAM_NAME = 'Ruuvi InfluxDB/MQTT Gateway'
 PROGRAM_PY = 'ruuvigw.py'
-VERSION = '3.1.3 (191125)'
+VERSION = '3.1.4 (191127)'
 PROGRAM_COPYRIGHT = '(c) TK 2019'
 
 CFGFILE = 'ruuvigw.json'
@@ -57,7 +57,7 @@ INFLUX_QUEUE_SIZE = 100
 
 # MQTT
 MQTT_ENABLE = True
-MQTT_DEBUG = False
+MQTT_FULLJSON = False
 MQTT_TOPIC = 'test'
 # MQTT_ADTOPIC = None
 # MQTT_ANNTOPIC = None

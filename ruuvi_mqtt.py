@@ -184,7 +184,6 @@ class ruuvi_mqtt(_mqtt):
             logger.error(f'{self._name} topic:{topic} item: {item}')
             return
 
-        l_rebuffer = False
         try:
             l_jobid = item.get('jobid', None)
             l_json = item['json']
@@ -193,26 +192,36 @@ class ruuvi_mqtt(_mqtt):
                     l_topic = topic + '/' + l_item['tags']['name']
                     async with ruuvi_mqtt._adlock:
                         await self._ruuvi_announce(item=l_item, topic=l_topic)
-                    if self._cfg.get('debug', _def.MQTT_DEBUG):
-                        l_item['fields']['hostname'] = l_item['tags']['hostname']
-                    else:
+                    l_payload = None
+                    if not self._cfg.get('fulljson', _def.MQTT_FULLJSON):
+                        l_payload = l_item['fields']
                         try:
-                            del l_item['fields']['time']
+                            del l_payload['time']
                         except:
                             pass
-                    if not await self._publish(topic=l_topic, payload=str(l_item['fields']).replace('\'', '\"').encode(), retain=self._retain):
-                        l_rebuffer = True
+                    else:
+                        l_payload = l_item
+
+                    if not await self._publish(topic=l_topic, payload=str(l_payload).replace('\'', '\"').encode(), retain=self._retain):
+                        logger.warning(f'{self._name} jobid:{l_jobid} publish failed topic:{l_topic} payload:{l_payload}')
             else:
                 l_topic = topic + '/' + l_json['tags']['name']
-                if not await self._publish(topic=l_topic, payload=str(l_json).replace('\'', '\"').encode(), retain=self._retain):
-                    l_rebuffer = True
+                async with ruuvi_mqtt._adlock:
+                    await self._ruuvi_announce(item=l_item, topic=l_topic)
+                l_payload = None
+                if not self._cfg.get('fulljson', _def.MQTT_FULLJSON):
+                    l_payload = l_json
+                    try:
+                        del l_payload['time']
+                    except:
+                        pass
+                else:
+                    l_payload = l_json
+                if not await self._publish(topic=l_topic, payload=str(l_payload).replace('\'', '\"').encode(), retain=self._retain):
+                    logger.warning(f'{self._name} jobid:{l_jobid} publish failed topic:{l_topic} payload:{l_payload}')
         except Exception:
             logger.exception(f'*** {self._name}')
             return
 
         logger.debug(f'{self._name} jobid:{l_jobid} topic:{l_topic} item:{item}')
-        if self._inqueue and l_rebuffer:
-            item['resend'] = True
-            await self.queue_put(outqueue=self._inqueue, data=item)
-            logger.debug(f'{self._name} jobid:{l_jobid} rebuffer data:{item}')
 
