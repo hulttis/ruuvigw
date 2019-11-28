@@ -272,26 +272,29 @@ class ruuvitag_socket(object):
         logger.debug(f'>>> device_id:{self._device_id}')
 
         self._data_ts = 0
-        while not self._get_lines_stop.is_set():
-            try:
-                l_socdata = await loop.sock_recv(self._socket, 1024)
-                self._data_ts = get_sec()
-                l_rawdata = await self._get_data(socdata=l_socdata)
-                if l_rawdata:
-                    await callback(rawdata=l_rawdata)
-                # await asyncio.sleep(0.01)
-            except asyncio.TimeoutError:
-                logger.error(f'>>> TimeoutError. restarting AF_BLUETOOTH socket')
-                await self._close()
-                await asyncio.sleep(0.2)
-                await self._open()
-                pass
-            except asyncio.CancelledError:
-                logger.warning(f'>>> CanceledError')
-                return
-            except Exception:
-                logger.exception(f'*** exception')
-                return
+        try:
+            while not self._get_lines_stop.is_set():
+                try:
+                    l_socdata = await loop.sock_recv(self._socket, 1024)
+                    self._data_ts = get_sec()
+                    l_rawdata = await self._get_data(socdata=l_socdata)
+                    if l_rawdata:
+                        await callback(rawdata=l_rawdata)
+                    # await asyncio.sleep(0.01)
+                except asyncio.TimeoutError:
+                    logger.error(f'>>> TimeoutError. restarting AF_BLUETOOTH socket')
+                    self._close()
+                    await asyncio.sleep(0.2)
+                    self._open()
+                    pass
+                except asyncio.CancelledError:
+                    logger.warning(f'>>> CanceledError')
+                    return
+        except Exception:
+            logger.exception(f'*** exception')
+        finally:
+            self._close()
+
 
 # -------------------------------------------------------------------------------
     def start(self, *,

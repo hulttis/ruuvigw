@@ -10,6 +10,7 @@
 import logging
 logger = logging.getLogger('ruuvitag')
 
+import os
 import asyncio
 from contextlib import suppress
 from datetime import datetime as _dt
@@ -52,11 +53,10 @@ class ruuvitag_hcidump(object):
 
 # -------------------------------------------------------------------------------
     def __repr__(self):
-        return f'ruuvitag_hcidump minlen:{self._minlen} device_reset:{self._device_reset} device_timeout:{self._device_timeout}'
+        return f'ruuvitag_hcidump minlen:{self._minlen} sudo:{self._sudo} device_reset:{self._device_reset} device_timeout:{self._device_timeout}'
 
 # ------------------------------------------------------------------------------
     def __del__(self):
-        logger.debug(f'>>> enter')
         self.stop()
 
 #-------------------------------------------------------------------------------
@@ -108,6 +108,8 @@ class ruuvitag_hcidump(object):
                 logger.info(f'>>> jobid:{jobid} restarting hcidump:{self._hcidump} hcitool:{self._hcitool}')
                 await self._kill_cmd(pid=self._hcidump, name='hcidump')
                 await self._kill_cmd(pid=self._hcitool, name='hcitool')
+                self._hcidump = None
+                self._hcitool = None
             except ProcessLookupError:
                 logger.error(f'>>> jobid:{jobid} ProcessLookupError')
             except:
@@ -162,13 +164,33 @@ class ruuvitag_hcidump(object):
         """
         Kills cmd process
         """
-        if pid:
-            logger.info(f'pid:{pid}')
+        def _pid_exists(pid):
+            """
+            Check if pid exists
+            """
+            if pid:
+                try:
+                    os.kill(pid.pid, 0)
+                except OSError:
+                    logger.warning(f'''pid:{pid} doesn't exist''')
+                    return False
+                except:
+                    logger.exception(f'*** pid:{pid}')
+                    return False
+                else:
+                    logger.info(f'pid:{pid} exists')
+                    return True
+            return False
+            
+        if _pid_exists(pid):
+            logger.info(f'pid:{pid} name:{name}')
             try:
-                await pid.kill()
+                pid.kill()
                 await pid.wait()
             except ProcessLookupError:
                 logger.error(f'>>> pid:{pid} name:{name} ProcessLookupError')
+            except:
+                logger.exception(f'pid:{pid} name:{name}')
             finally:
                 logger.info(f'>>> pid:{pid} name:{name} killed')
 
@@ -223,15 +245,16 @@ class ruuvitag_hcidump(object):
                     except asyncio.CancelledError:
                         logger.warning(f'>>> CanceledError')
                         return
-                    except Exception:
-                        logger.exception(f'*** exception')
-                        return
         except Exception:
             logger.exception(f'*** exception')
             return
         finally:
+            logger.info(f'hcidump:{self._hcidump} hcitool:{self._hcitool}')
             await self._kill_cmd(pid=self._hcidump, name='hcidump')
             await self._kill_cmd(pid=self._hcitool, name='hcitool')
+            self._hcidump = None
+            self._hcitool = None
+
 
 # -------------------------------------------------------------------------------
     def start(self, *, 
@@ -252,6 +275,10 @@ class ruuvitag_hcidump(object):
         logger.info('>>> get_lines task created')
 
         return True
+
+# -------------------------------------------------------------------------------
+    # def shutdown(self):
+    #     self.stop()
 
 # -------------------------------------------------------------------------------
     def stop(self):

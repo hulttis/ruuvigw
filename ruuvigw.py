@@ -151,19 +151,28 @@ class main_class(mixinSchedulerEvent):
                 self._loop.run_forever()
             except (KeyboardInterrupt, SystemExit):
                 logger.warning('KeyboardInterrupt/SystemExit')
+            except:
+                logger.exception(f'exception')
             finally:
+                logger.info(f'shutdown scheduler')
                 self._scheduler.shutdown()
+                logger.info(f'shutdown tasks')
                 self._shutdown()
-                time.sleep(2)
-                self._loop.stop()
-                self._loop.close()
+                # time.sleep(2)
+                # logger.info(f'stopping the loop')
+                # self._loop.stop()
+                # logger.info(f'closing the loop')
+                # self._loop.close()
 
         logger.info(f'stopped:{str(_dt.now())}')
 
 #-------------------------------------------------------------------------------
     def _stop(self, signame):
-        logger.warning(f'enter {signame}')
-        raise KeyboardInterrupt
+        logger.info(f'signame:{signame}')
+        if self._loop:
+            logger.info(f'stopping the loop')
+            self._loop.stop()
+        # raise KeyboardInterrupt
 
 #-------------------------------------------------------------------------------
     def _start_influx(self):
@@ -340,9 +349,10 @@ class main_class(mixinSchedulerEvent):
             for l_key, l_proc in l_procs.items():
                 l_task = l_proc.task
                 if l_task and not l_task.cancelled():
-                    logger.warning(f'shutdown task:{l_key}')
-                    if l_proc.proc and hasattr(l_proc.proc, 'shutdown'):
-                        l_proc.proc.shutdown()
+#                    if l_proc.proc and hasattr(l_proc.proc, 'shutdown'):
+#                        logger.info(f'shutdown task:{l_key}')
+#                        l_proc.proc.shutdown()
+                    logger.info(f'cancel task:{l_key}')
                     l_task.cancel()
                     with suppress(asyncio.CancelledError):
                         self._loop.run_until_complete(l_task)                    

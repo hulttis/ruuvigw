@@ -80,7 +80,7 @@ class ruuvitag_file(object):
                 #     await asyncio.sleep(1.0)
             except asyncio.CancelledError:
                 logger.warning(f'>>> CanceledError')
-                raise
+                return
             except Exception:
                 logger.exception(f'*** exception')
 

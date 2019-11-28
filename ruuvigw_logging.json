@@ -42,7 +42,7 @@
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "/var/log/ruuvigw/ruuvi_client.log",
+            "filename": "/var/log/ruuvigw/ruuvi.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 
@@ -51,7 +51,7 @@
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "/var/log/ruuvigw/influx_client.log",
+            "filename": "/var/log/ruuvigw/influx.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 
@@ -60,7 +60,7 @@
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "/var/log/ruuvigw/mqtt_client.log",
+            "filename": "/var/log/ruuvigw/mqtt.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 
@@ -82,7 +82,7 @@
     },
 
     "loggers": {
-        "/var/log/ruuvigw/_main__": {
+        "__main__": {
             "level": "INFO",
             "handlers": ["console"],
             "propagate": false
@@ -92,37 +92,27 @@
             "handlers": ["ruuvigw_fh"],
             "propagate": true
         },
-        "ruuvi_aioclient": {
-            "level": "DEBUG",
+        "ruuvi": {
+            "level": "INFO",
             "handlers": ["ruuvi_fh"],
             "propagate": true
         },
-        "influx_aioclient": {
+        "influx": {
             "level": "INFO",
             "handlers": ["influx_fh"],
             "propagate": true
         },
-        "mqtt_aioclient": {
+        "mqtt": {
             "level": "INFO",
             "handlers": ["mqtt_fh"],
             "propagate": true
         },
-        "ruuvi_influx":  {
-            "level": "INFO",
-            "handlers": ["influx_fh"],
-            "propagate": true
-        },
-        "ruuvi_mqtt":  {
-            "level": "INFO",
-            "handlers": ["mqtt_fh"],
-            "propagate": true
-        },
-        "aioruuvitag_ble": {
+        "ruuvitag": {
             "level": "INFO",
             "handlers": ["ruuvitag_fh"],
             "propagate": true
         },
-        "mixinSchedulerEvent": {
+        "mixin": {
             "level": "WARN",
             "handlers": ["console"],
             "propagate": false

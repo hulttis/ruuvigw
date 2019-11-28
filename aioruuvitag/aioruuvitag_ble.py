@@ -346,3 +346,7 @@ class aioruuvitag_ble(object):
     def task(self):
         """ Returns task """
         return self._collector.task()
+
+# -------------------------------------------------------------------------------
+    # def shutdown(self):
+    #     self.stop()

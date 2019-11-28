@@ -80,11 +80,15 @@ class influx_aioclient(_mixinQueue):
         logger.debug(f'{self._name} exit')
 
 # -------------------------------------------------------------------------------
-    def __del__(self):
-        self.shutdown()
+    # def __del__(self):
+    #     self.shutdown()
         
 #-------------------------------------------------------------------------------
-    def shutdown(self):
+    # def shutdown(self):
+    #     self._stop_event.set()
+
+#-------------------------------------------------------------------------------
+    def stop(self):
         self._stop_event.set()
 
 #-------------------------------------------------------------------------------
@@ -115,42 +119,44 @@ class influx_aioclient(_mixinQueue):
         logger.info(f'{self._name} start')
 
         # self.start_event.set()
-        while not self._stop_event.is_set():
-            try:
-                if self._dbcon:
-                    l_item = await self.queue_get(inqueue=self._inqueue)
-                    if l_item:
-                        if isinstance(l_item, dict):
-                            l_dict = l_item
-                        else:
-                            l_dict = json.loads(l_item)
-                        try:
-                            l_func = l_dict['func']
-                            if l_func not in self._funcs:   # unknown func -> execute_default
+        try:
+            while not self._stop_event.is_set():
+                try:
+                    if self._dbcon:
+                        l_item = await self.queue_get(inqueue=self._inqueue)
+                        if l_item:
+                            if isinstance(l_item, dict):
+                                l_dict = l_item
+                            else:
+                                l_dict = json.loads(l_item)
+                            try:
+                                l_func = l_dict['func']
+                                if l_func not in self._funcs:   # unknown func -> execute_default
+                                    l_func = 'default'
+                                    logger.error(f'{self._name} unknown func:{l_func}')
+                            except: # func not received -> execute_default
                                 l_func = 'default'
-                                logger.error(f'{self._name} unknown func:{l_func}')
-                        except: # func not received -> execute_default
-                            l_func = 'default'
-                            logger.error(f'{self._name} no func in received item')
+                                logger.error(f'{self._name} no func in received item')
 
-                        # logger.info(f'func:{l_func}')
-                        await self._funcs[l_func](item=l_item)
-                else:
-                    await asyncio.sleep(self.QUEUE_GET_TIMEOUT)
-            except asyncio.CancelledError:
-                logger.warning(f'{self._name} CanceledError')
-            except GeneratorExit:
-                logger.warning(f'GeneratorExit')
-            except Exception:
-                logger.exception(f'*** {self._name}')
-
-        if self._dbcon:
-            logger.info(f'{self._name} closing')
-            await self._dbcon.close()
+                            # logger.info(f'func:{l_func}')
+                            await self._funcs[l_func](item=l_item)
+                    else:
+                        await asyncio.sleep(self.QUEUE_GET_TIMEOUT)
+                except asyncio.CancelledError:
+                    logger.warning(f'{self._name} CanceledError')
+                    return
+                except GeneratorExit:
+                    logger.warning(f'{self._name} GeneratorExit')
+                    return
+        except Exception:
+            logger.exception(f'*** {self._name}')
+        finally:
+            if self._dbcon:
+                logger.info(f'{self._name} closing')
+                await self._dbcon.close()
+                self._dbcon = None
 
         logger.info(f'{self._name} done')
-
-        return True
 
 #-------------------------------------------------------------------------------
     async def _do_connect(self, *, cfg, jobid):

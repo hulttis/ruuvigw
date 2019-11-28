@@ -12,7 +12,7 @@ import sys
 PROGRAM_NAME = 'Ruuvi Gateway'
 LONG_PROGRAM_NAME = 'Ruuvi InfluxDB/MQTT Gateway'
 PROGRAM_PY = 'ruuvigw.py'
-VERSION = '3.1.4 (191127)'
+VERSION = '3.1.5 (191128)'
 PROGRAM_COPYRIGHT = '(c) TK 2019'
 
 CFGFILE = 'ruuvigw.json'

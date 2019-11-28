@@ -83,11 +83,15 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         logger.debug(f'{self._name} exit')
 
 # -------------------------------------------------------------------------------
-    def __del__(self):
-        self.shutdown()
+    # def __del__(self):
+    #     self.shutdown()
 
 #-------------------------------------------------------------------------------
-    def shutdown(self):
+    # def shutdown(self):
+    #     self._stop_event.set()
+
+#-------------------------------------------------------------------------------
+    def stop(self):
         self._stop_event.set()
 
 #-------------------------------------------------------------------------------
@@ -123,8 +127,10 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
                     await self._handle_data(indata=l_json)
                 except asyncio.CancelledError:
                     logger.warning(f'{self._name} CanceledError')
+                    return
                 except GeneratorExit:
                     logger.warning(f'GeneratorExit')
+                    return
                 except Exception:
                     logger.exception(f'*** {self._name}')
                     continue
@@ -136,7 +142,6 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         #         logger.info(f'{self._name} {l_mea} {l_mac} cnt:{self._cnt[l_mea][l_mac]}')
 
         logger.info(f'{self._name} done')
-        return True
 
 #-------------------------------------------------------------------------------
     def _update_cnt(self, *, measurname, mac):
