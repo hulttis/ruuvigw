@@ -3,7 +3,6 @@
 # Name:         ruuvitag_socket - bluetooth receiver
 # Copyright:    (c) 2019 TK
 # Licence:      MIT
-#
 # Thanks to: https://github.com/TheCellule/python-bleson
 #
 # AF_BLUETOOTH socket scanner
@@ -20,6 +19,7 @@ import asyncio
 from contextlib import suppress
 
 from .ruuvitag_misc import hex_string, get_sec
+from .ble_data import BLEData
 
 # ==============================================================================
 # ruuvitag_socket class
@@ -45,27 +45,31 @@ class ruuvitag_socket(object):
 # ------------------------------------------------------------------------------
     def __init__(self, *, 
         loop,
+        callback,
         scheduler=None,
-        device=0, 
-        minlen=0, 
-        device_reset=False, 
-        device_timeout=10000,   # ms 
+        device='hci0', 
+        mfids=None, 
+        device_reset=False,
+        device_timeout=10000,
         **kwargs
     ):
         logger.info(f'>>> device:{device}')
 
         if not loop:
-            raise ValueError(f'loop is not defined')
-
+            raise ValueError(f'loop is None')
         self._loop = loop
+        if not callback:
+            raise ValueError(f'callback is None')
+        self._callback = callback
+        self._stopevent = asyncio.Event()
+
         self._scheduler = scheduler
+        self._mfids = mfids
         self._device_reset = device_reset
         self._device_timeout = (device_timeout/1000)    # ms --> s
-        self._minlen = minlen
 
         self._task = None
         self._socket = None
-        self._get_lines_stop = asyncio.Event()
         self._data_ts = 0
         self._device_id = 0
         if device:
@@ -77,11 +81,11 @@ class ruuvitag_socket(object):
 
 # -------------------------------------------------------------------------------
     def __repr__(self):
-        return f'ruuvitag_socket device_id:{self._device_id} minlen:{self._minlen} device_reset:{self._device_reset} device_timeout:{self._device_timeout}'
+        return f'ruuvitag_socket device_id:{self._device_id} mfids:{self._mfids} device_reset:{self._device_reset} device_timeout:{self._device_timeout}'
 
 # ------------------------------------------------------------------------------
     def __del__(self):
-        logger.debug(f'>>> enter')
+        # logger.debug(f'>>> enter')
         self.stop()
 
 #-------------------------------------------------------------------------------
@@ -113,7 +117,7 @@ class ruuvitag_socket(object):
                 )
                 logger.info(f'>>> jobid:{l_jobid} scheduled')
             except:
-                logger.exception(f'*** jobid:{l_jobid}')
+                logger.exception(f'>>> jobid:{l_jobid}')
 
 #-------------------------------------------------------------------------------
     async def _do_socket_timeout(self, *,
@@ -121,8 +125,8 @@ class ruuvitag_socket(object):
         reset=False
     ):
         """
-        Supervises reception of the hci data
-        Restarts hci device if no data received within timeout period - device_timeout
+        Supervises reception of the socket data
+        Restarts socket if no data received within device_timeout period
         """
         l_now = get_sec()
         if (l_now - self._data_ts) > self._device_timeout:
@@ -136,7 +140,7 @@ class ruuvitag_socket(object):
                     self._device_on()
                 self._open()
             except:
-                logger.exception(f'*** jobid:{jobid}')
+                logger.exception(f'>>> jobid:{jobid}')
 
 # ------------------------------------------------------------------------------
     def _open(self):
@@ -144,54 +148,74 @@ class ruuvitag_socket(object):
 
         if self._socket:
             self._close()
+        
+        try:
+            self._socket = socket.socket(family=socket.AF_BLUETOOTH, type=socket.SOCK_RAW, proto=socket.BTPROTO_HCI)
+            self._socket.setblocking(False)
+            self._socket.bind((self._device_id,))
+        except:
+            self._socket = None
+            logger.exception(f'>>> exception')
 
-        self._socket = socket.socket(family=socket.AF_BLUETOOTH, type=socket.SOCK_RAW, proto=socket.BTPROTO_HCI)
-        self._socket.setblocking(False)
-        self._socket.bind((self._device_id,))
         logger.debug(f'>>> socket:{self._socket}')
 
 # ------------------------------------------------------------------------------
     def _close(self):
         logger.debug(f'>>> device_id:{self._device_id}')
 
-        if self._socket:
-            self._socket.close()
-            self._socket = None
-
-# -------------------------------------------------
-    def _device_on(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
-        self._send_cmd_value(cmd=ruuvitag_socket.HCIDEVUP, value=self._device_id)
-
-# -------------------------------------------------
-    def _device_off(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
-        self._send_cmd_value(cmd=ruuvitag_socket.HCIDEVDOWN, value=self._device_id)
+        try:
+            if self._socket:
+                self._socket.close()
+                self._socket = None
+        except:
+            logger.exception(f'>>> exception')
 
 # ------------------------------------------------------------------------------
     def _send_cmd(self, *, cmd, data):
         if self._socket:
             logger.debug(f'>>> device_id:{self._device_id} cmd:{cmd} data:{data}')
-            l_arr = array.array('B', data)
-            fcntl.ioctl(self._socket.fileno(), cmd, l_arr)
+            try:
+                l_arr = array.array('B', data)
+                fcntl.ioctl(self._socket.fileno(), cmd, l_arr)
+            except:
+                logger.exception(f'>>> exception')
 
 # ------------------------------------------------------------------------------
     def _send_cmd_value(self,*, cmd, value):
         if self._socket:
             logger.debug(f'>>> device_id:{self._device_id} cmd:{value} data:{value}')
-            fcntl.ioctl(self._socket.fileno(), cmd, value)
+            try:
+                fcntl.ioctl(self._socket.fileno(), cmd, value)
+            except:
+                logger.exception(f'>>> exception')
 
 # ------------------------------------------------------------------------------
     def _send_data(self, *, data):
         if self._socket:
             logger.debug(f'>>> device_id:{self._device_id} data:{data}')
-            self._socket.send(data)
+            try:
+                self._socket.send(data)
+            except:
+                logger.exception(f'>>> exception')
 
 # ------------------------------------------------------------------------------
     def _set_filter(self, *, data):
         if self._socket:
             logger.debug(f'>>> device_id:{self._device_id} data:{data}')
-            self._socket.setsockopt(socket.SOL_HCI, socket.HCI_FILTER, data)
+            try:
+                self._socket.setsockopt(socket.SOL_HCI, socket.HCI_FILTER, data)
+            except:
+                logger.exception(f'>>> exception')
+
+# ------------------------------------------------------------------------------
+    def _device_on(self):
+        logger.debug(f'>>> device_id:{self._device_id}')
+        self._send_cmd_value(cmd=ruuvitag_socket.HCIDEVUP, value=self._device_id)
+
+# ------------------------------------------------------------------------------
+    def _device_off(self):
+        logger.debug(f'>>> device_id:{self._device_id}')
+        self._send_cmd_value(cmd=ruuvitag_socket.HCIDEVDOWN, value=self._device_id)
 
 # ------------------------------------------------------------------------------
     def _set_scan_filter(self):
@@ -245,70 +269,61 @@ class ruuvitag_socket(object):
 
         self._enable_scan(enabled=False)
 
-# ------------------------------------------------------------------------------
-    async def _get_data(self, *, socdata):
-        logger.debug(f'>>> device_id:{self._device_id} socdata:{hex_string(data=socdata)}')
-
-        if socdata:
-            if socdata[0] == ruuvitag_socket.HCI_EVENT_PKT:
-                if socdata[1] == ruuvitag_socket.EVT_LE_META_EVENT:
-                    _, _, l_len = struct.unpack("<BBB", socdata[:3])
-                    if l_len >= self._minlen:  # check enough data received
-                        return hex_string(data=socdata, filler='')
-                else:
-                    logger.debug(f'>>> Unhandled HCI event packet, subtype={socdata[1]} socdata:{hex_string(data=socdata)}')
-            else:
-                logger.debug(f'>>> Unhandled HCI packet, type={socdata[0]} socdata:{hex_string(data=socdata)}')
-        return None
-
-# ------------------------------------------------------------------------------
-    async def _get_lines(self, *,
-        loop,
-        callback
-    ):
+# -------------------------------------------------------------------------------
+    async def _get_data(self, *, data):
         """
-        Receives data from socket
+        Gets data from the received socket data
         """
-        logger.debug(f'>>> device_id:{self._device_id}')
-
-        self._data_ts = 0
+        # logger.debug(f'>>> device_id:{self._device_id} data:{hex_string(data=data)}')
         try:
-            while not self._get_lines_stop.is_set():
-                try:
-                    l_socdata = await loop.sock_recv(self._socket, 1024)
-                    self._data_ts = get_sec()
-                    l_rawdata = await self._get_data(socdata=l_socdata)
-                    if l_rawdata:
-                        await callback(rawdata=l_rawdata)
-                    # await asyncio.sleep(0.01)
-                except asyncio.TimeoutError:
-                    logger.error(f'>>> TimeoutError. restarting AF_BLUETOOTH socket')
-                    self._close()
-                    await asyncio.sleep(0.2)
-                    self._open()
-                    pass
-                except asyncio.CancelledError:
-                    logger.warning(f'>>> CanceledError')
-                    return
-        except Exception:
-            logger.exception(f'*** exception')
-        finally:
-            self._close()
-
+            if data[0] == ruuvitag_socket.HCI_EVENT_PKT and data[1] == ruuvitag_socket.EVT_LE_META_EVENT:
+                _, _, l_len = struct.unpack("<BBB", data[:3])
+                return (data[3:], l_len)
+        #     else:
+        #         logger.debug(f'>>> Unhandled HCI event packet, subtype={data[1]} data:{hex_string(data=data)}')
+        except:
+            pass
+        return (None, 0)
 
 # -------------------------------------------------------------------------------
-    def start(self, *,
-        callback=None
-    ):
+    async def _handle_data(self, *, data):        
         """
-        Starts to receive from AF_BLUETOOTH socket
+        Handles received data from the socket
         """
-        if not self._loop:
-            print(f'self._loop is not defined')
-            return False
-        if not callback:
-            print(f'>>> callback is not defined')
-            return False
+        # logger.debug(f'>>> device_id:{self._device_id} data:{hex_string(data=data)}')
+        (l_data, l_len) = await self._get_data(data=data)
+        if not l_data:
+            return
+
+        l_mfid = 0xFFFF
+        try:
+            l_mac = ":".join(reversed(["{:02X}".format(x) for x in l_data[4:][:6]]))
+            l_rssi = l_data[l_len-1] & 0xFF
+            l_rssi = l_rssi-256 if l_rssi>127 else l_rssi
+            l_mfid = (l_data[16] & 0xFF) + ((l_data[17] & 0xFF) * 256)
+            if not self._mfids or l_mfid in self._mfids:
+                l_mfdata = l_data[18:l_len-1]
+                logger.debug(f'''>>> device_id:{self._device_id} mac:{l_mac} rssi:{l_rssi} mfid:{l_mfid} mflen:{len(l_mfdata)} mfdata:{hex_string(data=l_mfdata,filler='')}''')
+                try:
+                    self._data_ts = get_sec()
+                    await self._callback(bledata=BLEData(
+                        mac = l_mac,
+                        rssi = l_rssi,
+                        mfid = l_mfid,
+                        mfdata = l_mfdata,
+                        rawdata = data
+                    ))
+                except:
+                    logger.exception(f'>>> exception')
+        except:
+            # logger.exception(f'>>> exception')
+            pass
+        
+        return None
+
+# -------------------------------------------------------------------------------
+    async def run(self):
+        logger.info(f'>>> starting')
 
         if self._device_reset:
             logger.info(f'>>> restarting Bluetooth device_id:{self._device_id}')
@@ -319,8 +334,26 @@ class ruuvitag_socket(object):
         logger.info(f'>>> starting to receive from the AF_BLUETOOTH socket')
         self._open()
         self._start_scanning()
-        self._task = self._loop.create_task(self._get_lines(loop=self._loop, callback=callback))
-        logger.info('>>> get_lines task created')
+
+        while not self._stopevent.is_set():
+            try:
+                await self._handle_data(data=await self._loop.sock_recv(self._socket, 1024))
+            except GeneratorExit:
+                logger.error(f'>>> GeneratorExit')
+                self._stopevent.set()
+                break
+            except asyncio.CancelledError:
+                self._stopevent.set()
+                logger.warning(f'>>> CanceledError')
+                break
+            except:
+                logger.exception(f'>>> exception')
+                pass
+        
+        self._stop_scanning()
+        self._close()
+
+        logger.info('>>> completed')
 
         return True
 
@@ -329,12 +362,10 @@ class ruuvitag_socket(object):
         """
         Stops AF_BLUETOOTH socket
         """
-        logger.info(f'>>> stop to receive from AF_BLUETOOTH socket')
-        self._get_lines_stop.set()
-        self._stop_scanning()
-        self._close()
+        # logger.info(f'>>> stop to receive for AF_BLUETOOTH socket')
+        self._stopevent.set()
 
 # -------------------------------------------------------------------------------
-    def task(self):
-        """ Returns task """
-        return self._task
+    # def task(self):
+    #     """ Returns task """
+    #     return self._task

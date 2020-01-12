@@ -1,6 +1,6 @@
 # coding=utf-8
 # !/usr/bin/python3
-# Name:         ruuvitag misc - miscellanous stuff
+# Name:         ruuvitag misc - miscellanous ruuvitag
 # Copyright:    (c) 2019 TK
 # Licence:      MIT
 # -------------------------------------------------------------------------------
@@ -22,6 +22,8 @@ def get_sec():
     
 # ------------------------------------------------------------------------------
 def hex_string(*, data, filler=' '):
+    if not data:
+        return None
     return ''.join('{:02X}{}'.format(x, filler) for x in data)
 
 # -------------------------------------------------------------------------------

@@ -25,13 +25,14 @@ from .ruuvitag_df5 import ruuvitag_df5 as _df5
 
 import os
 import sys
+import platform
 
 from .aioruuvitag_dummy import ruuvitag_dummy
-if not sys.platform.startswith('linux') or os.environ.get('CI') == 'True': 
+from .aioruuvitag_bleak import ruuvitag_bleak
+if platform.system() == 'Windows':
     from .aioruuvitag_file import ruuvitag_file
-else:
+elif platform.system() == 'Linux':
     from .aioruuvitag_socket import ruuvitag_socket
-    from .aioruuvitag_hcidump import ruuvitag_hcidump
 
 DEFAULT_MINMAX = {
     "temperature": {
@@ -47,6 +48,7 @@ DEFAULT_MINMAX = {
         "max": 1155.36
     }
 }
+DEFAULT_MFIDS = [1177]
 # ===============================================================================
 class aioruuvitag_ble(object):
     """
@@ -78,7 +80,7 @@ class aioruuvitag_ble(object):
     def __init__(self, *,
         loop,
         scheduler,
-        collector='socket',
+        collector='socket' if platform.system() == 'Linux' else 'bleak',
         outqueue=None,
         callback=None,
         whtlist=[],
@@ -98,7 +100,7 @@ class aioruuvitag_ble(object):
         """
         loop - asyncio.loop (Required)
         scheduler - AsyncIOScheduler to schedule periodical tasks
-        collector - 'socket' or 'hcidump'
+        collector - 'socket' or 'bleak' or 'hcidump'
         outqueue - output queue (Default: None)
         callback - async callback(json=data) function to handle data in case other handling than put to the queue is needed
         whtlist - ble mac whitelist (default:[])
@@ -121,49 +123,72 @@ class aioruuvitag_ble(object):
         """
 
         # select collector
-        logger.info(f'>>> collector: {collector}')
-        logger.info(f'>>> platform:  {sys.platform}')
+        logger.info(f'>>> collector:{collector}')
+        logger.info(f'>>> platform:{sys.platform}')
+        # l_minlen = min(_df3.DATALEN, _df5.DATALEN)
         self._collector = None
-        if not sys.platform.startswith('linux') or os.environ.get('CI') == 'True': 
-            self._collector = ruuvitag_file(
-                loop=loop,
-                scheduler=scheduler,
-                minlen=min(_df3.DATALEN, _df5.DATALEN) + (43-_df5.DATALEN+1)
-            )
-            logger.info(f'>>> collector: ruuvitag_file')
-        else:
+        if platform.system() == 'Windows':
+            if collector.startswith('file'):    # need to be exclusively defined / just for testing
+                try:
+                    self._collector = ruuvitag_file(
+                        loop=loop,
+                        scheduler=scheduler,
+                        callback = self._handle_bledata
+                    )
+                    logger.info(f'>>> collector:ruuvitag_file')
+                except Exception:
+                    logger.exception(f'>>> file')
+            # if collector.startswith('bleak'):
+            if not self._collector:
+                try:
+                    self._collector = ruuvitag_bleak(
+                        loop=loop,
+                        scheduler=scheduler,
+                        device=device,
+                        mfids=DEFAULT_MFIDS,
+                        device_reset=device_reset,
+                        device_timeout=device_timeout,
+                        callback = self._handle_bledata
+                    )
+                    logger.info(f'>>> collector:ruuvitag_bleak')
+                except Exception:
+                    logger.exception(f'>>> bleak')
+        elif platform.system() == 'Linux':
             if collector.startswith('socket'):
                 try:
                     from socket import AF_BLUETOOTH
                     self._collector = ruuvitag_socket(
                         loop=loop,
+                        callback = self._handle_bledata,
                         scheduler=scheduler,
                         device=device,
-                        minlen=min(_df3.DATALEN, _df5.DATALEN) + (43-_df5.DATALEN+1),
+                        mfids=DEFAULT_MFIDS,
                         device_reset=device_reset,
-                        device_timeout=device_timeout,
+                        device_timeout=device_timeout
                     )
-                    logger.info (f'>>> collector: ruuvitag_socket')
+                    logger.info (f'>>> collector:ruuvitag_socket')
                 except Exception:
-                    logger.info(f'>>> fallback to the hcidump')
-            
-            if collector.startswith('hcidump') or not self._collector:
-                if os.path.exists('/usr/bin/hcidump'):
-                    self._collector = ruuvitag_hcidump(
+                    logger.info(f'>>> fallback to the ruuvitag_bleak')
+                    logger.exception(f'>>> socket')
+
+            if collector.startswith('bleak') or not self._collector:
+                try:
+                    self._collector = ruuvitag_bleak(
                         loop=loop,
                         scheduler=scheduler,
-                        minlen=min(_df3.DATALEN, _df5.DATALEN) + (43-_df5.DATALEN+1),
+                        device=device,
+                        mfids=DEFAULT_MFIDS,
                         device_reset=device_reset,
                         device_timeout=device_timeout,
-                        sudo=sudo
+                        callback = self._handle_bledata
                     )
-                    logger.info(f'>>> collector: ruuvitag_hcidump')
-                else:
-                    logger.info(f'>>> hcidump is not installed')
+                    logger.info(f'>>> collector:ruuvitag_bleak')
+                except Exception:
+                    logger.exception(f'>>> bleak')
 
         # self._collector = None, use dummy to show warning
         if not self._collector:
-            logger.info (f'>>> collector: ruuvitag_dummy')
+            logger.info (f'>>> collector:ruuvitag_dummy')
             self._collector = ruuvitag_dummy()
             raise ValueError(f'ruuvitag_dummy')
 
@@ -200,8 +225,9 @@ class aioruuvitag_ble(object):
         return f'aioruuvitag_ble interval:{self._sample_interval} calc:{str(self._calc)} calc_in_datas:{str(self._calc_in_datas)} whtlist:{self._whtlist} blklist:{self._blklist} tags:{self._tags} minmax:{self._minmax} callback:{self._callback} outqueue:{self._outqueue} debug:{self._debug}'
 
 # -------------------------------------------------------------------------------
-    def __del__(self):
-        self.stop()
+    # def __del__(self):
+    #     logger.debug(f'>>> {self}')
+    #     self.stop()
 
 # -------------------------------------------------------------------------------
     def _update_cnt(self, *, mac):
@@ -238,71 +264,70 @@ class aioruuvitag_ble(object):
         return False
 
 # -------------------------------------------------------------------------------
-    async def _handle_rawdata(self, *, rawdata):
+    def _checkmaclists(self, *, mac):
+        """ Checks mac lists"""
+        # check if blacklisted
+        if mac in self._blklist:
+            logger.debug(f'>>> {lmac_mac} blacklisted')
+            return False
+        # check if not whitelisted
+        if len(self._whtlist) and mac not in self._whtlist:
+            # add to blklist for faster blocking
+            self._blklist.append(mac)
+            logger.debug(f'>>> {mac} added to blklist (mac not in whtlist) size:{len(self._blklist)} blklist:{self._blklist}')
+            return False
+
+        return True
+# -------------------------------------------------------------------------------
+    async def _handle_bledata(self, *, bledata):
         """ 
-        Handles received rawdata from hcidump/socket. 
+        Handles received bledata from hcidump/socket. 
         Puts json formated result to the outqueue or calls callback function with it 
         """
-        l_ruuvidata = {}
-        l_outdata = {}
-        if rawdata:
-            l_us = _get_us()
-            l_ts = time.time()
+        l_mac = bledata.mac
+        l_mfdata = bledata.mfdata(mfid=0x499)
+        if l_mac and l_mfdata:
+            l_ruuvidata = {}
+            l_outdata = {}
+            # logger.debug(f'>>> {bledata}')
+            # check if mac listed
+            if not self._checkmaclists(mac=l_mac):
+                return
+            # check if it is sample time
+            if not self._checkinterval(mac=l_mac, interval=self._sample_interval):
+                return
 
-            # l_datalen = rawdata[2]
-            l_rawmac = rawdata[14:][:12]
-            l_mac = ':'.join(reversed([l_rawmac[i:i + 2] for i in range(0, len(l_rawmac), 2)]))
-            if len(l_mac) == 17: # check valid mac
-                # blacklist
-                if l_mac in self._blklist:
-                    # print(f'{l_mac} in blklist')
-                    return
-                # whitelist
-                if len(self._whtlist) and l_mac not in self._whtlist:
-                    # add to blklist for faster blocking
-                    self._blklist.append(l_mac)
-                    logger.debug(f'>>> {l_mac} added to blklist (mac not in whtlist) size:{len(self._blklist)} blklist:{self._blklist}')
-                    return
-                # sample interval
-                if not self._checkinterval(mac=l_mac, interval=self._sample_interval):
-                    # print(f'{l_mac} too fast')
-                    return
-
-                l_datas = _tagdecode.decode(rawdata=rawdata[26:], minmax=self._minmax)
-                if l_datas:
-                    try:
-                        l_datas['tagname'] = self._tags[l_mac]
-                    except:
-                        pass
-                    l_datas['time'] = _dt.utcfromtimestamp(l_ts).replace(tzinfo=timezone.utc).strftime(aioruuvitag_ble._timefmt)
-                    l_outdata = {'mac': l_mac, 'datas':l_datas}
-                    if self._calc:
-                        if self._calc_in_datas:
-                            _tagcalc.calc(datas=l_datas, out=l_outdata['datas'])
-                        else:
-                            l_outdata['calcs'] = {}
-                            _tagcalc.calc(datas=l_datas, out=l_outdata['calcs'])
-                    if self._debug:
-                        l_ruuvidata.clear()
-                        l_ruuvidata['blklist'] = self._blklist
-                        l_ruuvidata['count'] = self._update_cnt(mac=l_mac)
-                        l_ruuvidata['interval'] = self._update_us(mac=l_mac)
-                        l_ruuvidata['recvtime'] = int(l_ts)
-                        l_ruuvidata['elapsed'] = (_get_us()-l_us)
-                        l_outdata['_aioruuvitag'] = l_ruuvidata
-
-                    logger.debug(f'>>> {l_mac} outdata:{l_outdata}')
-                    if self._callback:
-                        await self._callback(jsondata=json.dumps(l_outdata))
+            l_datas = _tagdecode.decode(mfdata=l_mfdata, minmax=self._minmax)
+            if l_datas:
+                try:
+                    l_datas['tagname'] = self._tags[l_mac]
+                except:
+                    pass
+                l_datas['time'] = _dt.utcfromtimestamp(bledata.time).replace(tzinfo=timezone.utc).strftime(aioruuvitag_ble._timefmt)
+                if bledata.rssi:
+                    l_datas['rssi'] = bledata.rssi
+                l_outdata = {'mac': l_mac, 'datas':l_datas}
+                if self._calc:
+                    if self._calc_in_datas:
+                        _tagcalc.calc(datas=l_datas, out=l_outdata['datas'])
                     else:
-                        await self.queue_put(outqueue=self._outqueue, data=json.dumps(l_outdata))
+                        l_outdata['calcs'] = {}
+                        _tagcalc.calc(datas=l_datas, out=l_outdata['calcs'])
+                if self._debug:
+                    l_ruuvidata.clear()
+                    l_ruuvidata['blklist'] = self._blklist
+                    l_ruuvidata['count'] = self._update_cnt(mac=l_mac)
+                    l_ruuvidata['interval'] = self._update_us(mac=l_mac)
+                    l_ruuvidata['recvtime'] = bledata.time
+                    l_outdata['_aioruuvitag'] = l_ruuvidata
+
+                logger.debug(f'>>> {l_mac} outdata:{l_outdata}')
+                if self._callback:
+                    await self._callback(jsondata=json.dumps(l_outdata))
                 else:
-                    # add to blacklist only if whitelist not defined
-                    if l_mac not in self._whtlist:
-                        logger.debug(f'>>> {l_mac} added to blklist size:{len(self._blklist)} blklist:{self._blklist} rawdata:{rawdata[26:]}')
-                        self._blklist.append(l_mac)
+                    await self.queue_put(outqueue=self._outqueue, data=json.dumps(l_outdata))
             else:
-                logger.warning(f'>>> illegal mac:{l_mac} len:{len(l_mac)}')
+                logger.debug(f'>>> empty datas')
 
 # -------------------------------------------------------------------------------
     async def queue_put(self, *,
@@ -320,33 +345,18 @@ class aioruuvitag_ble(object):
                 await outqueue.get()
                 await self.queue_put(outqueue=outqueue, data=data)
             except Exception:
-                logger.exception(f'*** exception')
+                logger.exception(f'>>> exception')
         return False
 
-# -------------------------------------------------------------------------------
-    def start(self):
-        """ Starts ble collector """
+#-------------------------------------------------------------------------------
+    async def run(self):
+        """ runs ble collector """
         if self._collector:
-            logger.info(f'>>> starting {self._collector}')
-            l_status = self._collector.start(callback=self._handle_rawdata)
-            logger.debug(f'>>> status:{l_status} {self}')
-            return l_status
-        else:
-            logger.critical(f'collector not set')
-            return False
+            await self._collector.run()
 
 # -------------------------------------------------------------------------------
     def stop(self):
         """ Stops ble collector """
         if self._collector:
-            logger.info(f'>>> stopping {self._collector}')
+            # logger.info(f'>>> stopping {self._collector}')
             self._collector.stop()
-
-# -------------------------------------------------------------------------------
-    def task(self):
-        """ Returns task """
-        return self._collector.task()
-
-# -------------------------------------------------------------------------------
-    # def shutdown(self):
-    #     self.stop()

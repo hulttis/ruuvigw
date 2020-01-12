@@ -177,12 +177,12 @@ class mqtt_aioclient(_mixinQueue):
             else:
                 await l_client.loop_stop()
                 logger.info(f'{self._name} failed to connected host:{l_host} port:{l_port}')
-                return False
         except asyncio.CancelledError:
             logger.warning(f'{self._name} CancelledError')
+            raise
         except:
             logger.exception(f'*** {self._name}')
-
+            raise
         return False
 
 #-------------------------------------------------------------------------------
@@ -336,43 +336,45 @@ class mqtt_aioclient(_mixinQueue):
         logger.info(f'{self._name} start')
 
         # self.start_event.set()
+        l_exception = False
         try:
             while not self._stop_event.is_set():
-                try:
-                    if self._client:
-                        l_item = await self.queue_get(inqueue=self._inqueue)
-                        if l_item:
-                            if isinstance(l_item, dict):
-                                l_dict = l_item
-                            else:
-                                l_dict = json.loads(l_item)
-                            try:
-                                l_func = l_dict['func']
-                                if l_func not in self._funcs:   # unknown func -> execute_default
-                                    l_func = 'default'
-                                    logger.error(f'{self._name} unknown func:{l_func}')
-                            except: # func not received -> execute_default
-                                l_func = 'default'
-                                logger.error(f'{self._name} no func in received item')
-
-                            logger.debug(f'{self._name} func:{l_func} {self._funcs[l_func]}')
-                            await self._funcs[l_func](topic=self._topic, item=l_item)
-                    else:
-                        if not self._client:
-                            await self._connect(cfg=self._cfg)
+                if self._client:
+                    l_item = await self.queue_get(inqueue=self._inqueue)
+                    if l_item:
+                        if isinstance(l_item, dict):
+                            l_dict = l_item
                         else:
-                            await asyncio.sleep(self.QUEUE_GET_TIMEOUT)
-                except asyncio.CancelledError:
-                    logger.warning(f'{self._name} CanceledError')
-                    return
-                except GeneratorExit:
-                    logger.warning(f'{self._name} GeneratorExit')
-                    return
+                            l_dict = json.loads(l_item)
+                        try:
+                            l_func = l_dict['func']
+                            if l_func not in self._funcs:   # unknown func -> execute_default
+                                l_func = 'default'
+                                logger.error(f'{self._name} unknown func:{l_func}')
+                        except: # func not received -> execute_default
+                            l_func = 'default'
+                            logger.error(f'{self._name} no func in received item')
+
+                        logger.debug(f'{self._name} func:{l_func} {self._funcs[l_func]}')
+                        await self._funcs[l_func](topic=self._topic, item=l_item)
+                else:
+                    if not self._client:
+                        await self._connect(cfg=self._cfg)
+                    else:
+                        await asyncio.sleep(self.QUEUE_GET_TIMEOUT)
+        except asyncio.CancelledError:
+            logger.warning(f'{self._name} CanceledError')
+        except GeneratorExit:
+            logger.warning(f'{self._name} GeneratorExit')
         except:
             logger.exception(f'*** {self._name}')
+            l_exception = True
         finally:
             await self._disconnect()
-            logger.info(f'{self._name} done')
+            if l_exception:
+                logger.error(f'{self._name} failed')
+            else:
+                logger.info(f'{self._name} exit')
 
 #-------------------------------------------------------------------------------
     async def _get_newest(self, *, item):

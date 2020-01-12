@@ -8,70 +8,103 @@
 #
 # visudo
 # %sudo   ALL=(ALL:ALL) NOPASSWD: ALL
-#
 # -------------------------------------------------------------------------------
 import logging
 logger = logging.getLogger('ruuvitag')
 
 import os
-import time
 import asyncio
 import aiofiles
-from datetime import datetime as _dt
-from datetime import timedelta
+from contextlib import suppress
 
-from .ruuvitag_misc import get_sec as _get_sec
-
+from .ble_data import BLEData
 
 class ruuvitag_file(object):
     FILENAME = f'{os.path.dirname(__file__)}/hcidump.log'
 #-------------------------------------------------------------------------------
-    def __init__(self,*, loop, minlen=0, **kwargs):
+    def __init__(self,*, loop, callback, **kwargs):
         logger.info(f'>>> ruuvitag_file')
 
         if not loop:
-            raise ValueError(f'loop is not defined')
+            raise ValueError(f'loop is None')
         self._loop = loop
-        self._minlen = minlen
-
-        self._task = None
-        self._get_lines_stop = None
+        if not callback:
+            raise ValueError(f'callback is None')
+        self._callback = callback
+        self._stopevent = asyncio.Event()
 
         logger.info(f'>>> {self}')
 
 # -------------------------------------------------------------------------------
     def __repr__(self):
-        return f'ruuvitag_file minlen:{self._minlen}'
+        return f'ruuvitag_file'
 
-# ------------------------------------------------------------------------------
+# -------------------------------------------------------------------------------
     def __del__(self):
-        logger.info(f'>>> cleaning the rest')
+        # logger.info(f'>>> cleaning the rest')
         self.stop()
+
+# -------------------------------------------------------------------------------
+    def _parse(self, *,
+        rawdata
+    ):
+        if rawdata:
+            l_bytedata = bytearray.fromhex(rawdata)
+            l_len = len(l_bytedata)
+            
+            l_mac = None
+            l_rssi = None
+            l_mfid = None
+            l_mfdata = None
+            try:
+                l_rawmac = rawdata[14:][:12]
+                l_mac = ':'.join(reversed([l_rawmac[i:i + 2] for i in range(0, len(l_rawmac), 2)]))
+                if len(l_mac) != 17:    # check mac length
+                    l_mac = None
+
+                l_rssi = l_bytedata[l_len-1] & 0xFF
+                l_rssi = l_rssi-256 if l_rssi>127 else l_rssi
+
+                l_mfid = (l_bytedata[19] & 0xFF) + ((l_bytedata[20] & 0xFF) * 256)
+                l_mfdata = l_bytedata[21:l_len-1]
+                return BLEData(
+                    mac = l_mac,
+                    rssi = l_rssi,
+                    mfid = l_mfid,
+                    mfdata = l_mfdata,
+                    rawdata = l_bytedata
+                )
+            except:
+                pass
+
+        return None
 
 # -------------------------------------------------------------------------------
     async def _get_lines(self, *, 
         loop, 
         callback
     ):
-        l_rawdata = None
-        while not self._get_lines_stop.is_set():
+        while not self._stopevent.is_set():
+            l_rawdata = None
             try:
                 logger.info(f'>>> reading file {ruuvitag_file.FILENAME}...')
                 async with aiofiles.open(ruuvitag_file.FILENAME, loop=loop, mode='r') as l_fh:
                     async for l_line in l_fh:
+                        # logger.debug(f'line: {l_line}')
                         if l_line.startswith('> '):
                             # handle previous data when next start character received
-                            logger.debug(f'>>> rawdata:{l_rawdata}')
-                            if l_rawdata and len(l_rawdata) >= self._minlen:  # check enough data received 
-                                await callback(rawdata=l_rawdata)
-                            await asyncio.sleep(0.1)
+                            if l_rawdata:
+                                l_bledata = self._parse(rawdata=l_rawdata)
+                                if l_bledata:
+                                    await callback(bledata=l_bledata)
+                                await asyncio.sleep(0.1)
                             l_rawdata = l_line[2:].strip().replace(' ', '')
                         elif l_line.startswith('< '):
                             l_rawdata = None
                         elif l_rawdata:
                             l_rawdata += l_line.strip().replace(' ', '')
 
-                        if self._get_lines_stop.is_set():
+                        if self._stopevent.is_set():
                             break
 
                 logger.info(f'>>> file {ruuvitag_file.FILENAME} reading done')
@@ -85,37 +118,27 @@ class ruuvitag_file(object):
                 logger.exception(f'*** exception')
 
 # -------------------------------------------------------------------------------
-    def start(self, *, 
-        callback
-    ):
-        """
-        Starts to read from the file
-        """
-        if not self._loop:
-            logger.critical(f'>>> loop not defined')
-            return False
-        if not callback:
-            logger.critical(f'>>> callback not defined')
-            return False
+    async def run(self):
+        logger.info(f'>>> starting')
+        l_task = self._loop.create_task(self._get_lines(loop=self._loop, callback=self._callback))
+        while not self._stopevent.is_set():
+            try:
+                await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                logger.warning(f'>>> CanceledError')
+                return
+            except:
+                pass
+        l_task.cancel()
+        with suppress(asyncio.CancelledError):
+            self._loop.run_until_complete(l_task)
 
-        logger.info(f'>>> starting task for file:{ruuvitag_file.FILENAME}...')
-        self._get_lines_stop = asyncio.Event()
-        self._task = self._loop.create_task(self._get_lines(loop=self._loop, callback=callback))
-        logger.info('>>> get_lines task created')
+        logger.info('>>> completed')
 
         return True
 
 # -------------------------------------------------------------------------------
     def stop(self):
-        if self._task:
-            logger.info(f'>>> stop to read file:{ruuvitag_file.FILENAME}')
-            self._get_lines_stop.set()
-            self._task.cancel()
-            time.sleep(0.2)
-            logger.info('>>> get_lines task canceled')
-            self._task = None
+        # logger.info(f'>>>')
+        self._stopevent.set()
 
-# -------------------------------------------------------------------------------
-    def task(self):
-        """ Returns task """
-        return self._task

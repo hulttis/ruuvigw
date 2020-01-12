@@ -1,0 +1,80 @@
+{
+    "version": 1,
+    "disable_existing_loggers": false,
+
+    "formatters": {
+        "basic": {
+            "format": "[%(asctime)s.%(msecs)03d %(levelname)-8.8s] %(process)6d %(name)-30.30s %(funcName)-20.20s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        },
+        "long": {
+            "format": "[%(asctime)s.%(msecs)03d %(levelname)-8.8s] %(process)6d %(name)-30.30s %(filename)-20.20s line:%(lineno)-4d %(processName)-20.20s func:%(funcName)-20.20s %(message)s",
+            "datefmt": "%Y-%m-%d %H:%M:%S"
+        }
+    },
+
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+            "level": "DEBUG",
+            "formatter": "basic",
+            "stream": "ext://sys.stdout"
+        }
+    },
+
+    "root": {
+        "level": "DEBUG",
+        "handlers": ["console"]
+    },
+
+    "loggers": {
+        "__main__": {
+            "level": "INFO",
+            "propagate": true
+        },
+        "ruuvigw": {
+            "level": "INFO",
+            "propagate": true
+        },
+        "ruuvi": {
+            "level": "INFO",
+            "propagate": true
+        },
+        "influx": {
+            "level": "INFO",
+            "propagate": true
+        },
+        "mqtt": {
+            "level": "INFO",
+            "propagate": true
+        },
+        "ruuvitag": {
+            "level": "DEBUG",
+            "propagate": true
+        },
+        "mixin": {
+            "level": "WARN",
+            "propagate": true
+        },
+        "asyncio": {
+            "level": "WARN",
+            "propagate": true
+        },
+        "apscheduler": {
+            "level": "WARN",
+            "propagate": true
+        },
+        "aiohttp": {
+            "level": "WARN",
+            "propagate": true
+        },
+        "aiodns": {
+            "level": "WARN",
+            "propagate": true
+        },
+        "aiomqtt": {
+            "level": "WARN",
+            "propagate": true
+        }
+    }
+ }

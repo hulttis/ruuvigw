@@ -105,6 +105,5 @@ venv.bak/
 .mypy_cache/
 
 
-certs/ca.crt
-ruuvigw_logging_win.json
-ruuvigw_win.json
+certs/
+logs/

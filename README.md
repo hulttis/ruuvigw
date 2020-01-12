@@ -1,11 +1,11 @@
-# RUUVI GATEWAY 3.1.5(191128)
+# RUUVI GATEWAY 4.1.1 (200111)
 This software can be used to collect measurement data from Ruuvitag Bluetooth Low Energy devices https://ruuvi.com/
 
 ## MAIN FUNCTIONALITIES
 - Store selectable set of ruuvitag data fields to (multiple) Influx databases
 - Publish selectable set of ruuvitag data fields to (multiple) MQTT brokers
 - Home assistant Auto Discovery (on restart and/or on request)
-- Ruuvitag beacon naming (mac --> tagname)
+- Ruuvitag beacon renaming (mac --> tagname)
 - Ruuvitag per measurement instance white/black lists (white list can be generated from the TAGS)
 - Ruuvitag per measurement instance field renaming
 
@@ -66,34 +66,50 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | &nbsp;&nbsp;&nbsp;`   alter`: [boolean]       | alter if policy exists (default: false)               |
 
 
-| `MQTT`: [list]             | optional                                                                      |
-|:---------------------------|:------------------------------------------------------------------------------|
-| `enable`: [boolean]        | enable/disable MQTT instance (default: true)                                  |
-| `name`: [string]           | **unique** name of the MQTT instance (*required*)                             |
-| `client_id`: [string]      | **unique** client-id (default: `hostname-x`)                                  |
-| `uri`                      | mqtt url (uri or host/port/username/password/ssl are needed                   |
-| `host`: [string]           | mqtt host (*required*)                                                        |
-| `port`: [integer]          | mqtt port (default: 1883 (for ssl 8883))                                      |
-| `ssl`: [boolean]           | secure mqtt (default: False)                                                  |
-| `ssl_insecure`: [boolean]  | allow ssl without verifying hostname in the certificate (default: False)      |
-| `clean_session`: [boolean] | clean session (default: False)                                                |
-| `cert_verify`: [boolean]   | verify ssl certificates (default: True)                                       |
-| `cafile`: [string]         | certificate file (full path)                                                  |
-| `topic`: [string]          | mqtt publish topic                                                            |
-| `qos`: [integer]           | quality of service (default: 1)                                               |
-| `retain`: [boolean]        | mqtt publish retain (default: false)                                          |
-| `adtopic`: [string]        | home assistant autodiscovery topic (default: None - no autodiscovery)         |
-| `adretain`: [boolean]      | home assistant autodiscovery retain (default: false)                          |
-| `anntopic`: [string]       | home assistant auto discovery announce topic (default: None - not subscribed) |
-| `lwt`: [boolean]           | enable LWT (Last Will Testament (default: False)                              |
-| `lwttopic`: [string]       | LWT topic (default: auto generated from client_id)                            |
-|                            | format: `topic`/`client_id`/`lwt`                                             |
-| `lwtqos`: [integer]        | LWT quality of service (default: 1)                                           |
-| `lwtretain`: [boolean]     | LWT retain (default: False                                                    |
-| `lwtperiod`: [integer]     | LWT update period in seconds (default: 60)                                    |
-| `lwtonline`: [string]      | LWT online text (default: online)                                             |
-| `lwtoffline`: [string ]    | LWT offline text (default: offline)                                           |
-| `ADFIELDS`: [object]       | home assistant auto discovery fields (see *ruuvigw.json*)                     |
+| `MQTT`: [list]                            | optional                                                                      |
+|:------------------------------------------|:------------------------------------------------------------------------------|
+| `enable`: [boolean]                       | enable/disable MQTT instance (default: true)                                  |
+| `name`: [string]                          | **unique** name of the MQTT instance (*required*)                             |
+| `client_id`: [string]                     | **unique** client-id (default: `hostname-x`)                                  |
+| `uri`                                     | mqtt url (uri or host/port/username/password/ssl are needed                   |
+| `host`: [string]                          | mqtt host (*required*)                                                        |
+| `port`: [integer]                         | mqtt port (default: 1883 (for ssl 8883))                                      |
+| `ssl`: [boolean]                          | secure mqtt (default: False)                                                  |
+| `ssl_insecure`: [boolean]                 | allow ssl without verifying hostname in the certificate (default: False)      |
+| `clean_session`: [boolean]                | clean session (default: False)                                                |
+| `fulljson`: [boolean]                     | send full json object received from the ruuvi client (default: False)         |
+|                                           | useful for storing ruuvitag data to the influx via Node-RED                   |
+| `cert_verify`: [boolean]                  | verify ssl certificates (default: True)                                       |
+| `cafile`: [string]                        | certificate file (full path)                                                  |
+| `topic`: [string]                         | mqtt publish topic                                                            |
+| `qos`: [integer]                          | quality of service (default: 1)                                               |
+| `retain`: [boolean]                       | mqtt publish retain (default: false)                                          |
+| `adtopic`: [string]                       | home assistant autodiscovery topic (default: None - no autodiscovery)         |
+| `adretain`: [boolean]                     | home assistant autodiscovery retain (default: false)                          |
+| `anntopic`: [string]                      | home assistant auto discovery announce topic (default: None - not subscribed) |
+| `lwt`: [boolean]                          | enable LWT (Last Will Testament (default: False)                              |
+| &nbsp;&nbsp;&nbsp;`lwttopic`: [string]    | LWT topic (default: `topic`/`client_id`/`lwt`)                                |
+| &nbsp;&nbsp;&nbsp;`lwtqos`: [integer]     | LWT quality of service (default: 1)                                           |
+| &nbsp;&nbsp;&nbsp;`lwtretain`: [boolean]  | LWT retain (default: False                                                    |
+| &nbsp;&nbsp;&nbsp;`lwtperiod`: [integer]  | LWT update period in seconds (default: 60)                                    |
+| &nbsp;&nbsp;&nbsp;`lwtonline`: [string]   | LWT online text (default: online)                                             |
+| &nbsp;&nbsp;&nbsp;`lwtoffline`: [string ] | LWT offline text (default: offline)                                           |
+| `ADFIELDS`: [object]                      | home assistant auto discovery fields (see *ruuvigw.json*)                     |
+
+| `RUUVITAG`: [object]           | *required*                                                                                     |
+|:-------------------------------|:-----------------------------------------------------------------------------------------------|
+| `name`: [string]               | name of the ruuvitag instance (default: ***ruuvitag***)                                        |
+| `ruuviname`: [string]          | name of the ruuvi instance ruuvitag will be connected (default: ***ruuvi***)                   |
+| `collector`: [string]          | ruuvigw collector `socket`or `bleak` (default: `socket`)                                       |
+|                                | `socket` will fallback to the `bleak`. Windows: `bleak` if forced                              |
+| `sample_interval`: [integer]   | sample interval in ms (default: 1000ms)                                                        |
+| `device_timeout`: [integer]    | hcidump timeout in ms (default: 10000ms)                                                       |
+| `sudo`: [boolean]              | use sudo for hcidump command (default: False). needed if not run as root. set false for docker |
+| `whtlist_from_tags`: [boolean] | generate whitelist from the TAGS                                                               |
+| `TAGS`: [object]               | ruuvitags (see *ruuvigw.json*)                                                                 |
+| `WHTLIST`: [list]              |                                                                                                |
+| `BLKLIST`: [list]              |                                                                                                |
+*NOTE: Two ruuvigw's with `bleak` collector doesn't work at the same time at the same computer*
 
 | `RUUVI`: [object]         | *required*                                                                                         |
 |:--------------------------|:---------------------------------------------------------------------------------------------------|
@@ -106,19 +122,6 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `OUTPUT`: [list]          | list of InfluxDB/MQTT output(s) (*required*)                                                       |
 | `FIELDS`: [object]        | ruuvitag to InfluxDB and MQTT field name mapping (see ruuvitag fields) (see: *ruuvigw.json*)       |
 
-| `RUUVITAG`: [object]           | *required*                                                                                         |
-|:-------------------------------|:---------------------------------------------------------------------------------------------------|
-| `name`: [string]               | name of the ruuvitag instance (default: ***ruuvitag***)                                            |
-| `ruuviname`: [string]          | name of the ruuvi instance ruuvitag will be connected (default: ***ruuvi***)                       |
-| `collector`: [string]          | ruuvigw collector `socket`or `hcidump` (default: `socket`) `socket` will fallback to the `hcidump` |
-| `sample_interval`: [integer]   | sample interval in ms (default: 1000ms)                                                            |
-| `device_timeout`: [integer]    | hcidump timeout in ms (default: 10000ms)                                                           |
-| `sudo`: [boolean]              | use sudo for hcidump command (default: False). needed if not run as root. set false for docker     |
-| `whtlist_from_tags`: [boolean] | generate whitelist from the TAGS                                                                   |
-| `TAGS`: [object]               | ruuvitags (see *ruuvigw.json*)                                                                     |
-| `WHTLIST`: [list]              |                                                                                                    |
-| `BLKLIST`: [list]              |                                                                                                    |
-
 ### HOME ASSISTANT MQTT AUTO DISCOVERY
 - ruuvigw sends auto discovery to the `adtopic` by default to the following fields: temperature, humidity, pressure and batteryVoltage
 - ruuvigw subscribes mqtt topic defined in `anntopic` and expects mqtt payload to be `ruuvi`. auto discovery is sent to all found sensors during next update
@@ -128,13 +131,13 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 
 ## INSTALLATION
 ### REQUIREMENTS
-- Linux (tested in Ubuntu server 18.04.03 and 2019-09-26-raspbian-buster-lite). **NOT WORKING IN WINDOWS**
+- Linux (tested in Ubuntu server 18.04.03 and 2019-09-26-raspbian-buster-lite).
 - at least python 3.7 (recommended 3.8)
 - at least pip3.7 (recommended 3.8)
 - virtualenv (`pip3.8 install --user virtualenv`) - if not installed
 - git (`sudo apt -y install git`)
 - python with AF_BLUETOOTH socket support (`python -c "from socket import AF_BLUETOOTH"`)
-- bluez and bluez-hcitool (`sudo apt -y install bluez bluez-hcitool`) if python doesn't support AF_BLUETOOTH
+- bluez 5.43 or above (`sudo apt -y install bluez`) if python doesn't support AF_BLUETOOTH socket or if you want to use bleak
 NOTE: Instructions are for Python 3.8
 
 ### COMPILE PYTHON 3.8.0 FROM SOURCE - FOR AF_BLUETOOTH SOCKET SUPPORT

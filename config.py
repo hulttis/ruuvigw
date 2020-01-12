@@ -18,7 +18,7 @@ from urllib.parse import urlparse, urlunparse
 
 class config_reader(object):
 # -------------------------------------------------------------------------------
-    def __init__(self, *, 
+    def __init__(self, *,
         configfile
     ):
         super().__init__()
@@ -38,7 +38,7 @@ class config_reader(object):
             raise l_e
 
 # -------------------------------------------------------------------------------
-    def get_cfg(self, *, 
+    def get_cfg(self, *,
         section
     ):
         try:
@@ -48,7 +48,7 @@ class config_reader(object):
         return None
 
 # ------------------------------------------------------------------------------
-    def _readjson(self, *, 
+    def _readjson(self, *,
         configfile
     ):
         try:
@@ -109,7 +109,7 @@ class config_reader(object):
         if not l_hostname:
             l_hostname = socket.getfqdn().split('.', 1)[0]
             l_common['hostname'] = l_hostname
-            l_common['hostname_resolved'] = True         
+            l_common['hostname_resolved'] = True
 
         # print(f'common:{l_common}')
         return l_common
@@ -129,12 +129,12 @@ class config_reader(object):
                     raise ValueError(f'INFLUX/MQTT name not unique name:{l_name}')
                 unique_name.append(l_name)
                 if l_influx.get('enable', _def.INFLUX_ENABLE):
-                    l_influx_enabled = True                
+                    l_influx_enabled = True
                 if not l_influx.get('host', None):
                     raise ValueError(f'INFLUX host required name:{l_name}')
                 if not l_influx.get('database', None):
                     raise ValueError(f'INFLUX database required name:{l_name}')
-                
+
                 l_policy = l_influx.get('POLICY', None)
                 if not l_policy:
                     l_influx['POLICY'] = _def.INFLUX_POLICY
@@ -150,14 +150,24 @@ class config_reader(object):
         l_mqtts = cfg.get('MQTT', None)
         if l_mqtts:
             for l_idx, l_mqtt in enumerate(l_mqtts):
+                l_this_enabled = False
+                if l_mqtt.get('enable', _def.INFLUX_ENABLE):
+                    l_mqtt_enabled = True
+                    l_this_enabled = True
                 l_name = l_mqtt.get('name', None)
                 if not l_name:
-                    raise ValueError(f'MQTT name required idx:{l_idx}')
+                    l_txt = f'MQTT name required idx:{l_idx}'
+                    if l_this_enabled:
+                        raise ValueError(l_txt)
+                    else:
+                        print(f'*** {l_txt}')
                 if l_name in unique_name:
-                    raise ValueError(f'INFLUX/MQTT name not unique name:{l_name}')
+                    l_txt = f'INFLUX/MQTT name not unique name:{l_name}'
+                    if l_this_enabled:
+                        raise ValueError(l_txt)
+                    else:
+                        print(f'*** {l_txt}')
                 unique_name.append(l_name)
-                if l_mqtt.get('enable', _def.INFLUX_ENABLE):
-                    l_mqtt_enabled = True                
                 l_client_id = l_mqtt.get('client_id', None)
                 if not l_client_id:
                     l_client_id = f'''{l_common['hostname']}-{l_idx}'''
@@ -174,7 +184,11 @@ class config_reader(object):
                     l_uri_attr = urlparse(l_uri)
                     l_scheme = l_uri_attr.scheme
                     if l_scheme not in ('mqtts', 'mqtt'):
-                        raise ValueError(f'unknown uri scheme {l_uri_attr.scheme} name:{l_name}')
+                        l_txt = f'unknown uri scheme {l_uri_attr.scheme} name:{l_name}'
+                        if l_this_enabled:
+                            raise ValueError(l_txt)
+                        else:
+                            print(f'*** {l_txt}')
                     l_host = l_uri_attr.hostname
                     l_port = l_uri_attr.port if l_uri_attr else l_mqtt.get('port', _def.MQTT_PORT)
                     l_ssl = l_mqtt.get('ssl', _def.MQTT_SSL)
@@ -196,22 +210,38 @@ class config_reader(object):
                     l_username = l_mqtt.get('username', _def.MQTT_USERNAME)
                     l_password = l_mqtt.get('password', _def.MQTT_PASSWORD)
                 if not l_host:
-                    raise ValueError(f'MQTT host (or complete uri) required name:{l_name}')
+                    l_txt = f'MQTT host (or complete uri) required name:{l_name}'
+                    if l_this_enabled:
+                        raise ValueError(l_txt)
+                    else:
+                        print(f'*** {l_txt}')
                 l_mqtt['host'] = l_host
                 l_mqtt['port'] = l_port
                 l_mqtt['ssl'] = l_ssl
                 l_mqtt['username'] = l_username
                 l_mqtt['password'] = l_password
-                
+
                 if l_ssl:
                     l_cafile = l_mqtt.get('cafile', None)
                     if not l_cafile:
-                        raise ValueError(f'MQTTS used, cafile required name:{l_name}')
+                        l_txt = f'MQTTS used, cafile required name:{l_name}'
+                        if l_this_enabled:
+                            raise ValueError(l_txt)
+                        else:
+                            print(f'*** {l_txt}')
                     if not os.path.exists(l_cafile):
-                        raise ValueError(f'''MQTTS used, cafile doesn't exist name:{l_name}''')
-                l_topic = l_mqtt.get('topic', None) 
+                        l_txt = f'''MQTTS used, cafile doesn't exist name:{l_name}'''
+                        if l_this_enabled:
+                            raise ValueError(l_txt)
+                        else:
+                            print(f'*** {l_txt}')
+                l_topic = l_mqtt.get('topic', None)
                 if not l_topic:
-                    raise ValueError(f'MQTT topic required name:{l_name}')
+                    l_txt = f'MQTT topic required name:{l_name}'
+                    if l_this_enabled:
+                        raise ValueError(l_txt)
+                    else:
+                        print(f'*** {l_txt}')
 
                 l_lwttopic = l_mqtt.get('lwttopic', None)
                 if not l_lwttopic:
@@ -229,7 +259,7 @@ class config_reader(object):
         except AttributeError:
             logger.exception(f'*** exception')
             self._print_default()
-        except ValueError: 
+        except ValueError:
             raise
         except Exception:
             logger.exception(f'*** exception')
@@ -358,6 +388,7 @@ class config_reader(object):
                         print ('      cert_verify:      {0:s}'.format(str(l_mqtt.get('cert_verify', _def.MQTT_CERT_VERIFY))))
                         print (f'''      cafile:           {str(l_mqtt.get('cafile', None))}''')
                     print ('   username:            {0:s} {1:s}'.format(l_mqtt.get('username', _def.MQTT_USERNAME), '(from uri)' if l_uri_params[2] else ''))
+                    print ('   fulljson:            {0:s}'.format(str(l_mqtt.get('fulljson', _def.MQTT_FULLJSON))))
                     print ('   clean_session:       {0:s}'.format(str(l_mqtt.get('clean_session', _def.MQTT_CLEAN_SESSION))))
                     l_topic = l_mqtt.get('topic', None)
                     print ('   topic:               {0:s}'.format(str(l_topic)))
@@ -439,25 +470,25 @@ class config_reader(object):
             #         print ('{0:17s} {1:8.1f} {2:8.1f}'.format(l_key, l_minmax[l_key]['min'], l_minmax[l_key]['max']))
             #     print ('')
         else:
-            raise ValueError(f'[RUUVITAG] configuration missing')
+            raise ValueError(f'[RUUVITAG] configuration required')
 
         l_ruuvi = self.get_cfg(section='RUUVI')
         if l_ruuvi:
             print ('RUUVI: {0}'.format(l_ruuvi.get('name', _def.RUUVI_NAME)))
             print ('-'*_def.SEPARATOR_LENGTH)
             # print ('time format:         {0:s}'.format(l_ruuvi.get('timefmt', _def.RUUVI_TIMEFMT)))
-            print ('max interval:        {0:d} s'.format(l_ruuvi.get('max_interval', _def.RUUVI_MAX_INTERVAL)))
+            print ('max_interval:        {0:d} s'.format(l_ruuvi.get('max_interval', _def.RUUVI_MAX_INTERVAL)))
             # print ('write lastdata int:  {0:d} s'.format(l_ruuvi.get('write_lastdata_int', _def.RUUVI_WRITE_LASTDATA_INT)))
             # print ('write lastdata cnt:  {0:d}'.format(l_ruuvi.get('write_lastdata_cnt', _def.RUUVI_WRITE_LASTDATA_CNT)))
-            
+
             # self._print_queue(cfg=l_ruuvi, indent='')
             print ('')
-            
+
             for l_meas in l_ruuvi.get('MEASUREMENTS'):
                 print ('MEASUREMENT: {0}'.format(l_meas.get('name', _def.RUUVI_NAME)))
                 print ('-'*_def.SEPARATOR_LENGTH)
-                print ('   include calcs     {0:s}'.format(str(l_meas.get('calcs', _def.RUUVI_CALCS))))
-                print ('   include debugs    {0:s}'.format(str(l_meas.get('debug', _def.RUUVI_DEBUG))))
+                print ('   calcs             {0:s}'.format(str(l_meas.get('calcs', _def.RUUVI_CALCS))))
+                # print ('   debugs            {0:s}'.format(str(l_meas.get('debug', _def.RUUVI_DEBUG))))
                 print ()
                 l_outputs = l_meas.get('OUTPUT', _def.RUUVI_OUTPUT)
                 if l_outputs:
@@ -482,7 +513,7 @@ class config_reader(object):
                             else:
                                 l_status = 'disabled'
                         print ('   {0:25s} {1:10s} {2}'.format(l_item, l_type, l_status))
-                    print ('')            
+                    print ('')
 
                 l_round = l_meas.get('ROUND', _def.RUUVI_ROUND)
                 l_fields = l_meas.get('FIELDS', None)
@@ -498,23 +529,23 @@ class config_reader(object):
                             print('')
                     print ('')
 
-                l_delta = l_meas.get('DELTA', _def.RUUVI_DELTA)
-                if l_delta:
-                    print ('   FIELD NAME                DELTA')
-                    print ('   '+'-'*(_def.SEPARATOR_LENGTH-3))
-                    for l_key in l_delta:
-                        print('   {0:25s} {1}'.format(l_key, l_delta[l_key]))
-                    print ('')
+                # l_delta = l_meas.get('DELTA', _def.RUUVI_DELTA)
+                # if l_delta:
+                #     print ('   FIELD NAME                DELTA')
+                #     print ('   '+'-'*(_def.SEPARATOR_LENGTH-3))
+                #     for l_key in l_delta:
+                #         print('   {0:25s} {1}'.format(l_key, l_delta[l_key]))
+                #     print ('')
 
-                l_maxdelta = l_meas.get('MAXDELTA', _def.RUUVI_MAXDELTA)
-                if l_maxdelta:
-                    print ('   FIELD NAME                MAXCHANGE  MAXCOUNT')
-                    print ('   '+'-'*(_def.SEPARATOR_LENGTH-3))
-                    for l_key in l_maxdelta:
-                        print('   {0:25s} {1:<10.1f} {2}'.format(l_key, l_maxdelta[l_key]['maxchange'], l_maxdelta[l_key]['maxcount']))
-                    print ('')
+                # l_maxdelta = l_meas.get('MAXDELTA', _def.RUUVI_MAXDELTA)
+                # if l_maxdelta:
+                #     print ('   FIELD NAME                MAXCHANGE  MAXCOUNT')
+                #     print ('   '+'-'*(_def.SEPARATOR_LENGTH-3))
+                #     for l_key in l_maxdelta:
+                #         print('   {0:25s} {1:<10.1f} {2}'.format(l_key, l_maxdelta[l_key]['maxchange'], l_maxdelta[l_key]['maxcount']))
+                #     print ('')
         else:
-            raise ValueError(f'[RUUVI] configuration missing')
+            raise ValueError(f'[RUUVI] configuration required')
 
 # ------------------------------------------------------------------------------
     def _find_influx(self, *, name):

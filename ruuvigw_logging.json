@@ -42,7 +42,7 @@
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "/var/log/ruuvigw/ruuvi.log",
+            "filename": "/var/log/ruuvigw/ruuvi_client.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 
@@ -51,7 +51,7 @@
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "/var/log/ruuvigw/influx.log",
+            "filename": "/var/log/ruuvigw/influx_client.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 
@@ -60,7 +60,7 @@
             "class": "logging.handlers.RotatingFileHandler",
             "level": "DEBUG",
             "formatter": "basic",
-            "filename": "/var/log/ruuvigw/mqtt.log",
+            "filename": "/var/log/ruuvigw/mqtt_client.log",
             "maxBytes": 10485760,
             "backupCount": 10,
             "encoding": "utf8" 

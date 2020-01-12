@@ -116,6 +116,7 @@ class main_class(mixinSchedulerEvent):
         #     next_run_time = _dt.now()+timedelta(seconds=5)
         # )
         self._loop = None
+        self._tag = None
 
 #-------------------------------------------------------------------------------
     def _ticktak(self):
@@ -145,7 +146,6 @@ class main_class(mixinSchedulerEvent):
             logger.critical(f'Starting INFLUX and MQTT failed. Check configuration !')
         self._run = self._start_ruuvi()
         self._run = self._start_ruuvitag()
-
         if self._run:
             try:
                 self._loop.run_forever()
@@ -181,7 +181,7 @@ class main_class(mixinSchedulerEvent):
         if not self._run:
             return False
 
-        l_res = True
+        l_status = False
         l_common = self._cfgh.get_cfg(section='COMMON')
         l_influxs = self._cfgh.get_cfg(section='INFLUX')
         if l_influxs:
@@ -201,16 +201,13 @@ class main_class(mixinSchedulerEvent):
                         self._procs.add(l_influx.get('name', _def.INFLUX_NAME), procItem(proc=l_proc, queue=l_inqueue, task=l_task))
                         logger.info('task:{0:s} created'.format(l_influx.get('name', _def.INFLUX_NAME)))
                         logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
+                        l_status = True
                     except Exception:
                         logger.exception('failed to add task:{0:s}'.format(l_influx.get('name', _def.INFLUX_NAME)))
-                        l_res = False
                 else:
                     logger.warning('INFLUX:{0} disabled'.format(l_influx.get('name', _def.INFLUX_NAME)))
-        else:
-            # logger.error('INFLUX configuration required')
-            l_res = False
 
-        return l_res
+        return l_status
 
 #-------------------------------------------------------------------------------
     def _start_mqtt(self):
@@ -219,7 +216,7 @@ class main_class(mixinSchedulerEvent):
         if not self._run:
             return False
 
-        l_res = True
+        l_status = False
         l_common = self._cfgh.get_cfg(section='COMMON')
         l_mqtts = self._cfgh.get_cfg(section='MQTT')
         if l_mqtts:
@@ -239,16 +236,13 @@ class main_class(mixinSchedulerEvent):
                         self._procs.add(l_mqtt.get('name', _def.MQTT_NAME), procItem(proc=l_proc, queue=l_inqueue, task=l_task))
                         logger.info('task:{0:s} created'.format(l_mqtt.get('name', _def.MQTT_NAME)))
                         logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
+                        l_status = True
                     except Exception:
                         logger.exception('failed to add task:{0:s}'.format(l_mqtt.get('name', _def.MQTT_NAME)))
-                        l_res = False
                 else:
                     logger.warning('MQTT:{0} disabled'.format(l_mqtt.get('name', _def.MQTT_NAME)))
-        else:
-            # logger.error('MQTT configuration required')
-            l_res = False
 
-        return l_res
+        return l_status
 
 #-------------------------------------------------------------------------------
     def _start_ruuvi(self):
@@ -257,7 +251,6 @@ class main_class(mixinSchedulerEvent):
         if not self._run:
             return (False)
 
-        l_res = True
         l_common = self._cfgh.get_cfg(section='COMMON')
         l_ruuvi = self._cfgh.get_cfg(section='RUUVI')
         if l_ruuvi:
@@ -282,18 +275,16 @@ class main_class(mixinSchedulerEvent):
                     self._procs.add(l_ruuvi.get('name', _def.RUUVI_NAME), procItem(proc=l_proc, queue=l_inqueue, task=l_task))
                     logger.info('task:{0:s} created'.format(l_ruuvi.get('name', _def.RUUVI_NAME)))
                     logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
+                    return True
                 except Exception:
                     logger.exception('failed to add task:{0:s}'.format(l_ruuvi.get('name', _def.RUUVI_NAME)))
-                    l_res = False
             else:
                 logger.error('queue(s) not found:{0}'.format(l_ruuvi.get('OUTPUT', [])))
                 logger.debug('procs:{0}'.format(self._procs))
-                l_res = False
         else:
             logger.error('*** RUUVI configuration missing')
-            l_res = False
 
-        return (l_res)
+        return False
 
 #-------------------------------------------------------------------------------
     def _start_ruuvitag(self):
@@ -305,7 +296,7 @@ class main_class(mixinSchedulerEvent):
         if l_ruuvitag:
             l_outqueue = self._find_queue(l_ruuvitag.get('ruuviname', _def.RUUVITAG_RUUVINAME))
             try:
-                l_tag = _tag(
+                l_proc = _tag(
                     loop = self._loop,
                     scheduler = self._scheduler,
                     collector = l_ruuvitag.get('collector', _def.RUUVITAG_COLLECTOR),
@@ -325,12 +316,11 @@ class main_class(mixinSchedulerEvent):
                     device = l_ruuvitag.get('device', _def.RUUVITAG_DEVICE)
                 )
                 # start ruuvitag task
-                l_status = l_tag.start()
-                if l_status:
-                    self._procs.add('aioruuvitag', procItem(proc=None, queue=None, task=l_tag.task()))
-                    return True
-                else:
-                    logger.error('*** RUUVITAG start failed')
+                l_task = self._loop.create_task(l_proc.run())
+                logger.info('task:{0:s} created'.format(l_ruuvitag.get('name', _def.RUUVITAG_NAME)))
+                logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
+                self._procs.add(l_ruuvitag.get('name', _def.RUUVITAG_NAME), procItem(proc=l_proc, queue=None, task=l_task))
+                return True
             except ValueError:
                 logger.critical(f'*** RUUVITAG start failed')
             except:

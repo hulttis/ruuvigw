@@ -12,8 +12,8 @@ import sys
 PROGRAM_NAME = 'Ruuvi Gateway'
 LONG_PROGRAM_NAME = 'Ruuvi InfluxDB/MQTT Gateway'
 PROGRAM_PY = 'ruuvigw.py'
-VERSION = '3.1.5 (191128) (github)'
-PROGRAM_COPYRIGHT = '(c) TK 2019'
+VERSION = '4.1.1 (200111)'
+PROGRAM_COPYRIGHT = '(c) TK 2020'
 
 CFGFILE = 'ruuvigw.json'
 if not sys.platform.startswith('linux') or os.environ.get('CI') == 'True': 
@@ -93,24 +93,28 @@ MQTT_QUEUE_SIZE = 100
 MQTT_ONLYNEWEST = True
 MQTT_ADFIELDS = {
     "temperature": {
-        "unit_of_meas": "C",
-        "dev_cla": "temperature",
-        "val_tpl": "{{ value_json.temperature | float | round(1) }}"
+        "unit_of_measurement": "C",
+        "device_class": "temperature",
+        "value_template": "{{ value_json.temperature | float | round(1) }}",
+        "icon": "mdi:thermometer"
     },
     "humidity": {
-        "unit_of_meas": "%",
-        "dev_cla": "humidity",
-        "val_tpl": "{{ value_json.humidity | float | round(1) }}"
+        "unit_of_measurement": "%",
+        "device_class": "humidity",
+        "value_template": "{{ value_json.humidity | float | round(1) }}",
+        "icon": "mdi:water-percent"
     },
     "pressure": {
-        "unit_of_meas": "hPa",
-        "dev_cla": "pressure",
-        "val_tpl": "{{ value_json.pressure | float | round(1) }}"
+        "unit_of_measurement": "hPa",
+        "device_class": "pressure",
+        "value_template": "{{ value_json.pressure | float | round(1) }}",
+        "icon": "mdi:gauge"
     },
     "batteryVoltage": {
-        "unit_of_meas": "V",
-        "dev_cla": "battery",
-        "val_tpl": "{{ value_json.batteryVoltage | float / 1000 | round(3) }}"
+        "unit_of_measurement": "V",
+        "device_class": "battery",
+        "value_template": "{{ value_json.batteryVoltage | float / 1000 | round(3) }}",
+        "icon": "mdi:mdi:battery"
     }
 }
 

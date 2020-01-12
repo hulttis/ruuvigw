@@ -13,6 +13,7 @@ aioinflux = "*"
 pandas = "*"
 aiodns = "*"
 aiomqtt = "*"
+bleak = "*"
 
 [requires]
 python_version = "3.7"

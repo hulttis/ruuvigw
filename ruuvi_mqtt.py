@@ -18,6 +18,7 @@ import defaults as _def
 
 class ruuvi_mqtt(_mqtt):
     _adlock = asyncio.Lock()
+    _anndelay = 2
 #-------------------------------------------------------------------------------
     def __init__(self, *,
         cfg,
@@ -101,15 +102,15 @@ class ruuvi_mqtt(_mqtt):
                 l_name = l_tags['name']
                 if not self._set_announce(key=l_tags['mac']):
                     l_dev = {
-                        'ids': [l_tags['mac']],
+                        'identifiers': l_tags['mac'],
                         'name': 'Ruuvi ' + l_name,
-                        'mdl': _def.PROGRAM_NAME,
-                        'sw': _def.VERSION,
-                        'mf': _def.PROGRAM_COPYRIGHT
+                        'model': _def.PROGRAM_NAME,
+                        'sw_version': _def.VERSION,
+                        'manufacturer': _def.PROGRAM_COPYRIGHT
                     }
                     logger.info(f'{self._name} auto discovery:{l_name}')
-                    l_lwt = self._cfg.get('lwt', _def.MQTT_LWT)
-                    l_lwttopic = self._cfg.get('lwttopic', None)
+                    # l_lwt = self._cfg.get('lwt', _def.MQTT_LWT)
+                    # l_lwttopic = self._cfg.get('lwttopic', None)
                     # publish fields
                     for l_key, _ in item['fields'].items():
                         if l_key not in l_ignore:
@@ -124,17 +125,18 @@ class ruuvi_mqtt(_mqtt):
                             l_adfields = self._adfields.get(l_key, None)
                             if l_adfields:
                                 l_payload = {
-                                    'dev': l_dev,
+                                    'unit_of_measurement': l_adfields.get('unit_of_measurement', ''),
                                     'name': l_name + ' ' + l_key,
-                                    'stat_t': topic,                                    # state topic
-                                    'val_tpl': l_adfields.get('val_tpl', ''),           # value template
+                                    'state_topic': topic,
+                                    'value_template': l_adfields.get('value_template', ''),
                                     'unique_id': l_name + '-' + l_key,
                                     'qos':  self._adqos,
-                                    'unit_of_meas': l_adfields.get('unit_of_meas', ''),
-                                    'dev_cla': l_adfields.get('dev_cla', '')
+                                    'device_class': l_adfields.get('device_class', ''),
+                                    'icon': l_adfields.get('icon', ''),
+                                    'dev': l_dev
                                 }
-                                if l_lwt and l_lwttopic:
-                                    l_payload['avty_t'] = l_lwttopic                    # availability topic
+                                # if l_lwt and l_lwttopic:
+                                #     l_payload['avty_t'] = l_lwttopic                    # availability topic
                                 await self._publish(
                                     topic=l_adtopic, 
                                     payload=str(l_payload).replace('\'', '\"').encode(), 
@@ -192,6 +194,7 @@ class ruuvi_mqtt(_mqtt):
                     l_topic = topic + '/' + l_item['tags']['name']
                     async with ruuvi_mqtt._adlock:
                         await self._ruuvi_announce(item=l_item, topic=l_topic)
+                        await asyncio.sleep(self._anndelay)
                     l_payload = None
                     if not self._cfg.get('fulljson', _def.MQTT_FULLJSON):
                         l_payload = l_item['fields']
@@ -219,9 +222,12 @@ class ruuvi_mqtt(_mqtt):
                     l_payload = l_json
                 if not await self._publish(topic=l_topic, payload=str(l_payload).replace('\'', '\"').encode(), retain=self._retain):
                     logger.warning(f'{self._name} jobid:{l_jobid} publish failed topic:{l_topic} payload:{l_payload}')
+        except asyncio.CancelledError:
+            logger.warning(f'CancelledError')
+            raise
         except Exception:
             logger.exception(f'*** {self._name}')
-            return
+            raise
 
         logger.debug(f'{self._name} jobid:{l_jobid} topic:{l_topic} item:{item}')
 

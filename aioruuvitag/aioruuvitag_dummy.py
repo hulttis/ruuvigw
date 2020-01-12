@@ -1,7 +1,7 @@
 # coding=utf-8
 # !/usr/bin/python3
 # Name:         ruuvitag_dummy
-#               just dummy - do nothing
+#               just dummy - used in case other collectors doesn't work
 # Copyright:    (c) 2019 TK
 # Licence:      MIT
 # -------------------------------------------------------------------------------

@@ -28,7 +28,7 @@ import defaults as _def
 
 class influx_aioclient(_mixinQueue):
     QUEUE_GET_TIMEOUT = 0.2
-    INFLUX_CONNECT_DELAY = 1.0
+    INFLUX_CONNECT_DELAY = 5.0
 #-------------------------------------------------------------------------------
     def __init__(self, *,
         cfg,
