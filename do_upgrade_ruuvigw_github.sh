@@ -9,4 +9,6 @@ cp -vr /app/ruuvigw.json.bk /app/ruuvigw/ruuvigw.json
 source /app/ruuvigw/env/bin/activate
 pip install -r /app/ruuvigw/requirements.txt
 deactivate
+cat /app/ruuvigw/ruuvigw_defaults.py | grep VERSION
+echo journalctl -b -u ruuvigw --no-pager -n 300 -f
 systemctl start ruuvigw

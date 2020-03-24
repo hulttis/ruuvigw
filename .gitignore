@@ -105,5 +105,13 @@ venv.bak/
 .mypy_cache/
 
 
-certs/
+certs/ca.crt
 logs/
+*.old
+ruuvigw_win.json
+socket_test.py
+ruuvigw_logging_win.json
+ruuvigw_logging_linux.json
+ruuvigw_linux.json
+ruuvigw_nr.json
+aioruuvitag/scanner_test.py

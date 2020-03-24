@@ -33,16 +33,11 @@ class ruuvitag_file(object):
         self._callback = callback
         self._stopevent = asyncio.Event()
 
-        logger.info(f'>>> {self}')
+        logger.info(f'>>> {self} initialized')
 
 # -------------------------------------------------------------------------------
     def __repr__(self):
         return f'ruuvitag_file'
-
-# -------------------------------------------------------------------------------
-    def __del__(self):
-        # logger.info(f'>>> cleaning the rest')
-        self.stop()
 
 # -------------------------------------------------------------------------------
     def _parse(self, *,
@@ -119,7 +114,7 @@ class ruuvitag_file(object):
 
 # -------------------------------------------------------------------------------
     async def run(self):
-        logger.info(f'>>> starting')
+        logger.info(f'>>> starting...')
         l_task = self._loop.create_task(self._get_lines(loop=self._loop, callback=self._callback))
         while not self._stopevent.is_set():
             try:

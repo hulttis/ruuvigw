@@ -1,7 +1,7 @@
 # coding=utf-8
 #-------------------------------------------------------------------------------
-# Name:        ruuvi_influx.py
-# Purpose:     ruuvi specific influx
+# Name:        ruuvigw_influx.py
+# Purpose:     ruuvigw influx client
 # Copyright:   (c) 2019 TK
 # Licence:     MIT
 #-------------------------------------------------------------------------------
@@ -9,7 +9,7 @@ import logging
 logger = logging.getLogger('influx')
 
 from influx_aioclient import influx_aioclient as _influx
-import defaults as _def
+import ruuvigw_defaults as _def
 
 # ==================================================================================
 
@@ -19,6 +19,7 @@ class ruuvi_influx(_influx):
         cfg,
         hostname,
         inqueue,
+        # fbqueue,
         loop,
         scheduler,
         nameservers=None
@@ -27,6 +28,7 @@ class ruuvi_influx(_influx):
             cfg - influx configuration
             hostname - name of the system
             inqueue - incoming queue for data
+            fbqueue - feedback queue for parent
             loop - asyncio loop
             scheduler - used scheduler for scheduled tasks
             nameservers - list of used name servers
@@ -34,13 +36,14 @@ class ruuvi_influx(_influx):
         super().__init__(
             cfg=cfg,
             inqueue=inqueue,
+            # fbqueue=fbqueue,
             loop=loop,
             scheduler=scheduler,
             nameservers=nameservers
         )
         self._funcs['execute_ruuvi'] = self._execute_dict
 
-        logger.debug(f'{self._name} done')
+        logger.info(f'{self._name} initialized')
 
 #-------------------------------------------------------------------------------
 

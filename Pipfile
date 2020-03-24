@@ -4,16 +4,17 @@ url = "https://pypi.org/simple"
 verify_ssl = true
 
 [dev-packages]
-aiofiles = "*"
 pylint = "*"
 
 [packages]
-apscheduler = "*"
-aioinflux = "*"
-pandas = "*"
 aiodns = "*"
+aiohttp = "*"
+aioinflux = "*"
 aiomqtt = "*"
-bleak = "*"
+APScheduler = "*"
+aiokafka = "*"
+bleak = {version = "*", platform_system = "== 'Windows'"}
+aiofiles = {version = "*", platform_system = "== 'Windows'"}
 
 [requires]
 python_version = "3.7"

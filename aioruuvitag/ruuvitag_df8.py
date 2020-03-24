@@ -27,7 +27,8 @@ import math
 
 from .ruuvitag_misc import (
     twos_complement,
-    rshift
+    rshift,
+    get_field_adjustment
 )
 
 _DF = 8
@@ -45,7 +46,7 @@ class ruuvitag_df8(object):
     PASSWORD = 0x5275757669636f6d5275757669546167   # "RuuvicomRuuviTag"
 
 # -------------------------------------------------------------------------------
-    def _temperature(self, *, mfdata, minmax):
+    def _temperature(self, *, mfdata, minmax, tagadjustsment):
         """ Temperature in 0.005 degrees. """
         if mfdata[1:2] == 0x7FFF:
             return None
@@ -60,16 +61,15 @@ class ruuvitag_df8(object):
                 logger.debug(f'>>> minmax not defined: {minmax}')
 
         l_temperature = twos_complement((mfdata[1] << 8) + mfdata[2], 16) / 200
-        # if l_temperature < -163.840 or l_temperature > +163.830:
-        #     logger.error(f'>>> Temperature out of range: value:{l_temperature} mfdata[1]:{mfdata[1]} mfdata[2]:{mfdata[2]}')
-        #     raise ValueError(f'Temperature out of range: value:{l_temperature} mfdata[1]:{mfdata[1]} mfdata[2]:{mfdata[2]}')
+        l_temperature += get_field_adjustment('temperature', tagadjustsment)
         if l_temperature < l_min or l_temperature > l_max:
-            logger.warning(f'>>> Temperature out of limits: value:{l_temperature} min:{l_min} max:{l_max}')
-            raise ValueError(f'Temperature out of limits: value:{l_temperature} min:{l_min} max:{l_max}')
+            l_txt = f'''Temperature out of limits: value:{l_temperature} min:{l_min} max:{l_max} adjustment:{get_field_adjustment('humidity', tagadjustsment)}'''
+            logger.warning(f'>>> {l_txt}')
+            raise ValueError(l_txt)
         return round(l_temperature, ROUND_TEMPERATURE)
 
 # -------------------------------------------------------------------------------
-    def _humidity(self, *, mfdata, minmax):
+    def _humidity(self, *, mfdata, minmax, tagadjustsment):
         """ Humidity (16bit unsigned) in 0.0025% (0-163.83% range, though realistically 0-100%). """
         if mfdata[3:4] == 0xFFFF:
             return None
@@ -84,16 +84,15 @@ class ruuvitag_df8(object):
                 logger.debug(f'>>> minmax not defined: {minmax}')
 
         l_humidity = ((mfdata[3] & 0xFF) << 8 | mfdata[4] & 0xFF) / 400
-        # if l_humidity < 0 or l_humidity > 100:
-        #     logger.error(f'>>> Humidity out of range: value:{l_humidity} mfdata[3]:{mfdata[3]} mfdata[4]:{mfdata[4]}')
-        #     raise ValueError(f'Humidity out of range: value:{l_humidity} mfdata[3]:{mfdata[3]} mfdata[4]:{mfdata[4]}')
+        l_humidity += get_field_adjustment('humidity', tagadjustsment)
         if l_humidity < l_min or l_humidity > l_max:
-            logger.warning(f'>>> Humidity out of limits: value:{l_humidity} min:{l_min} max:{l_max}')
-            raise ValueError(f'Humidity out of limits: value:{l_humidity} min:{l_min} max:{l_max}')
+            l_txt = f'''Humidity out of limits: value:{l_humidity} min:{l_min} max:{l_max} adjustment:{get_field_adjustment('humidity', tagadjustsment)}'''
+            logger.warning(f'>>> {l_txt}')
+            raise ValueError(l_txt)
         return round(l_humidity, ROUND_TEMPERATURE)
 
 # -------------------------------------------------------------------------------
-    def _pressure(self, *, mfdata, minmax):
+    def _pressure(self, *, mfdata, minmax, tagadjustsment):
         """ Pressure (16bit unsigned) in 1 Pa units, with offset of -50 000 Pa. """
         if mfdata[5:6] == 0xFFFF:
             return None
@@ -108,13 +107,12 @@ class ruuvitag_df8(object):
                 logger.debug(f'>>> minmax not defined: {minmax}')
 
         l_pressure = ((mfdata[5] & 0xFF) << 8 | mfdata[6] & 0xFF) + 50000
-        l_pressure = round((l_pressure / 100), 2)
-        # if l_pressure < 500 or l_pressure > 1155.36:
-        #     logger.error(f'>>> Pressure out of range: value:{l_pressure} mfdata[5]:{mfdata[5]} mfdata[6]:{mfdata[6]}')
-        #     raise ValueError(f'Pressure out of range: value:{l_pressure} mfdata[5]:{mfdata[5]} mfdata[6]:{mfdata[6]}')
+        l_pressure = round((l_pressure / 100), 3)
+        l_pressure += get_field_adjustment('pressure', tagadjustsment)
         if l_pressure < l_min or l_pressure > l_max:
-            logger.warning(f'>>> Pressure out of limits: value:{l_pressure} min:{l_min} max:{l_max}')
-            raise ValueError(f'Pressure out of limits: value:{l_pressure} min:{l_min} max:{l_max}')
+            l_txt = f'''Pressure out of limits: value:{l_pressure} min:{l_min} max:{l_max} adjustment:{get_field_adjustment('humidity', tagadjustsment)}'''
+            logger.warning(f'>>> {l_txt}')
+            raise ValueError(l_txt)
         return round(l_pressure, ROUND_PRESSURE)
 
 # -------------------------------------------------------------------------------
@@ -178,14 +176,14 @@ class ruuvitag_df8(object):
             return None
 
 # -------------------------------------------------------------------------------
-    def decode(self, *, mfdata, minmax):
+    def decode(self, *, mfdata, minmax, tagadjustsment):
         try:
             if len(mfdata) >= ruuvitag_df8.DATALEN:
                 return {
                     '_df': _DF,
-                    'humidity': self._humidity(mfdata=mfdata, minmax=minmax.get('humidity', None)),
-                    'temperature': self._temperature(mfdata=mfdata, minmax=minmax.get('temperature', None)),
-                    'pressure': self._pressure(mfdata=mfdata, minmax=minmax.get('pressure', None)),
+                    'humidity': self._humidity(mfdata=mfdata, minmax=minmax.get('humidity', None), tagadjustsment=tagadjustsment),
+                    'temperature': self._temperature(mfdata=mfdata, minmax=minmax.get('temperature', None), tagadjustsment=tagadjustsment),
+                    'pressure': self._pressure(mfdata=mfdata, minmax=minmax.get('pressure', None), tagadjustsment=tagadjustsment),
                     'tx_power': self._txpower(mfdata=mfdata),
                     'battery': self._battery(mfdata=mfdata),
                     'movement_counter': self._movementcounter(mfdata=mfdata),

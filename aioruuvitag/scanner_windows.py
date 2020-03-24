@@ -2,12 +2,12 @@
 """
 Perform Bluetooth LE Scan.
 
-Based on https://github.com/hbldh/bleak/blob/master/bleak/backends/dotnet/discovery.py by 
+Based on https://github.com/hbldh/bleak/blob/master/bleak/backends/dotnet/discovery.py by
 Created by hbldh <henrik.blidh@nedomkull.com>
 
 """
 import logging
-logger = logging.getLogger('ruuvitag')
+logger = logging.getLogger('bleak_scanner')
 
 import asyncio
 import queue
@@ -31,10 +31,9 @@ async def scanner(
     Args:
         outqueue:  outgoing queue
         stopevent: stop event
-        loop: asyncio event loop (not used, for compatibility)
-        device: bluetooth device (not used, for compatibility)
-
     """
+    logger.info(f'>>> scanner:windows')
+
     watcher = BluetoothLEAdvertisementWatcher()
     q = queue.Queue(QUEUE_SIZE)
 
@@ -58,6 +57,7 @@ async def scanner(
                 l_reader.ReadBytes(l_b)
                 l_data[l_m.CompanyId] = bytes(l_b)
             local_name = e.Advertisement.LocalName
+            logger.debug(f'>>> bdaddr:{l_bdaddr} local_name:{local_name} mfdata:{l_data}')
             if q:
                 q.put(BLEDevice(
                     l_bdaddr,
@@ -66,9 +66,15 @@ async def scanner(
                     uuids=l_uuids,
                     manufacturer_data=l_data,
                 ))
+
+    def AdvertisementWatcher_Stopped(sender, e):
+        if sender == watcher:
+            logger.info(f'>>> stopped')
+
 # -----------------------------------------------------------------------------
 
     watcher.Received += AdvertisementWatcher_Received
+    watcher.Stopped += AdvertisementWatcher_Stopped
     watcher.ScanningMode = BluetoothLEScanningMode.Active
 
     # Watcher works outside of the Python process.
@@ -84,13 +90,16 @@ async def scanner(
                 await asyncio.sleep(0.1)
             except asyncio.CancelledError:
                 logger.warning(f'>>> CancelledError')
-                pass
+                break
         except:
-            logger.exception()
+            logger.exception(f'>>> exception')
     watcher.Stop()
+    await asyncio.sleep(0.1)
 
     try:
         watcher.Received -= AdvertisementWatcher_Received
+        watcher.Stopped -= AdvertisementWatcher_Stopped
+        logger.info(f'>>> Event handlers removed')
     except:
-        logger.exception(f'>>> Could not remove event handlers')
+        logger.warning(f'>>> Could not remove event handlers')
 

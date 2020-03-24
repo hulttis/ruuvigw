@@ -10,6 +10,7 @@
 #               aiohttp                                 // pipenv install aiohttp
 #               aiodns                                  // pipenv install aiodns
 #               aiomqtt                                 // pipenv install aiomqtt
+#               aiokafka                                // pipenv install aiokafka
 #               asyncio
 # dev:          pylint                                  // pipenv install -d pylint
 #               aiofiles                                // pipenv install aiofiles
@@ -25,21 +26,21 @@ import functools
 import traceback
 from contextlib import suppress
 from json import JSONDecodeError
-from datetime import timedelta
-from datetime import datetime as _dt
+from datetime import datetime as _dt, timedelta as _td
 from multiprocessing import cpu_count
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler as _scheduler
 from apscheduler.events import EVENT_ALL
 
-from ruuvi_dataclasses import procItem, procDict
 from mixinSchedulerEvent import mixinSchedulerEvent
-from config import config_reader as _config
-from ruuvi_aioclient import ruuvi_aioclient as _ruuvi
+from ruuvigw_dataclasses import procItem, procDict
+from ruuvigw_config import config_reader as _config
+from ruuvigw_aioclient import ruuvi_aioclient as _ruuvi
+from ruuvigw_influx import ruuvi_influx as _influx
+from ruuvigw_mqtt import ruuvi_mqtt as _mqtt
+from ruuvigw_kafka import ruuvigw_kafka as _kafka
+import ruuvigw_defaults as _def
 from aioruuvitag.aioruuvitag_ble import aioruuvitag_ble as _tag
-from ruuvi_influx import ruuvi_influx as _influx
-from ruuvi_mqtt import ruuvi_mqtt as _mqtt
-import defaults as _def
 
 import logging
 _LOG_CFGFILE = _def.LOG_CFGFILE
@@ -113,10 +114,11 @@ class main_class(mixinSchedulerEvent):
         #     replace_existing = True,
         #     max_instances = 1,
         #     coalesce = True,
-        #     next_run_time = _dt.now()+timedelta(seconds=5)
+        #     next_run_time = _dt.now()+_td(seconds=5)
         # )
         self._loop = None
         self._tag = None
+        # self._fbqueue = asyncio.Queue(maxsize=_def.COMMON_FBQUEUE_SIZE)
 
 #-------------------------------------------------------------------------------
     def _ticktak(self):
@@ -141,9 +143,10 @@ class main_class(mixinSchedulerEvent):
 
         l_influx = self._start_influx()
         l_mqtt = self._start_mqtt()
-        if not l_influx and not l_mqtt:
+        l_kafka = self._start_kafka()
+        if not l_influx and not l_mqtt and not l_kafka:
             self._run = False
-            logger.critical(f'Starting INFLUX and MQTT failed. Check configuration !')
+            logger.critical(f'Starting INFLUX, MQTT and KAFKA failed. Check logs and configuration !')
         self._run = self._start_ruuvi()
         self._run = self._start_ruuvitag()
         if self._run:
@@ -158,11 +161,6 @@ class main_class(mixinSchedulerEvent):
                 self._scheduler.shutdown()
                 logger.info(f'shutdown tasks')
                 self._shutdown()
-                # time.sleep(2)
-                # logger.info(f'stopping the loop')
-                # self._loop.stop()
-                # logger.info(f'closing the loop')
-                # self._loop.close()
 
         logger.info(f'stopped:{str(_dt.now())}')
 
@@ -182,10 +180,11 @@ class main_class(mixinSchedulerEvent):
             return False
 
         l_status = False
-        l_common = self._cfgh.get_cfg(section='COMMON')
-        l_influxs = self._cfgh.get_cfg(section='INFLUX')
+        l_common = self._cfgh.get_cfg(section=_def.KEY_COMMON)
+        l_influxs = self._cfgh.get_cfg(section=_def.KEY_INFLUX)
         if l_influxs:
             for l_influx in l_influxs:
+                l_name = l_influx.get('name', _def.INFLUX_NAME)
                 if l_influx.get('enable', _def.INFLUX_ENABLE):
                     try:
                         l_inqueue = asyncio.Queue(maxsize=l_influx.get('queue_size', _def.INFLUX_QUEUE_SIZE))
@@ -193,20 +192,20 @@ class main_class(mixinSchedulerEvent):
                             cfg = l_influx,
                             hostname = l_common.get('hostname', _def.COMMON_HOSTNAME),
                             inqueue = l_inqueue,
+                            # fbqueue = self._fbqueue,
                             loop = self._loop,
                             scheduler = self._scheduler,
                             nameservers = l_common.get('nameservers', _def.COMMON_NAMESERVERS)
                         )
                         l_task = self._loop.create_task(l_proc.run())
-                        self._procs.add(l_influx.get('name', _def.INFLUX_NAME), procItem(proc=l_proc, queue=l_inqueue, task=l_task))
-                        logger.info('task:{0:s} created'.format(l_influx.get('name', _def.INFLUX_NAME)))
-                        logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
+                        self._procs.add(l_name, procItem(proc=l_proc, queue=l_inqueue, task=l_task))
+                        logger.info(f'[{_def.KEY_INFLUX}] task:{l_name} created')
+                        logger.debug(f'[{_def.KEY_INFLUX}] proc:{l_proc} task:{l_task}')
                         l_status = True
                     except Exception:
-                        logger.exception('failed to add task:{0:s}'.format(l_influx.get('name', _def.INFLUX_NAME)))
+                        logger.exception(f'''[{_def.KEY_INFLUX}] failed to add task:{l_name}''')
                 else:
-                    logger.warning('INFLUX:{0} disabled'.format(l_influx.get('name', _def.INFLUX_NAME)))
-
+                    logger.warning(f'''[{_def.KEY_INFLUX}]:{l_name} disabled''')
         return l_status
 
 #-------------------------------------------------------------------------------
@@ -217,10 +216,11 @@ class main_class(mixinSchedulerEvent):
             return False
 
         l_status = False
-        l_common = self._cfgh.get_cfg(section='COMMON')
-        l_mqtts = self._cfgh.get_cfg(section='MQTT')
+        l_common = self._cfgh.get_cfg(section=_def.KEY_COMMON)
+        l_mqtts = self._cfgh.get_cfg(section=_def.KEY_MQTT)
         if l_mqtts:
             for l_mqtt in l_mqtts:
+                l_name = l_mqtt.get('name', _def.MQTT_NAME)
                 if l_mqtt.get('enable', _def.MQTT_ENABLE):
                     try:
                         l_inqueue = asyncio.Queue(maxsize=l_mqtt.get('queue_size', _def.MQTT_QUEUE_SIZE))
@@ -228,20 +228,54 @@ class main_class(mixinSchedulerEvent):
                             cfg = l_mqtt,
                             hostname = l_common.get('hostname', _def.COMMON_HOSTNAME),
                             inqueue = l_inqueue,
+                            # fbqueue = self._fbqueue,
                             loop = self._loop,
                             scheduler = self._scheduler,
                             nameservers = l_common.get('nameservers', _def.COMMON_NAMESERVERS)
                         )
                         l_task = self._loop.create_task(l_proc.run())
-                        self._procs.add(l_mqtt.get('name', _def.MQTT_NAME), procItem(proc=l_proc, queue=l_inqueue, task=l_task))
-                        logger.info('task:{0:s} created'.format(l_mqtt.get('name', _def.MQTT_NAME)))
-                        logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
+                        self._procs.add(l_name, procItem(proc=l_proc, queue=l_inqueue, task=l_task))
+                        logger.info(f'[{_def.KEY_MQTT}] task:{l_name} created')
+                        logger.debug(f'[{_def.KEY_MQTT}] proc:{l_proc} task:{l_task}')
                         l_status = True
                     except Exception:
-                        logger.exception('failed to add task:{0:s}'.format(l_mqtt.get('name', _def.MQTT_NAME)))
+                        logger.exception(f'''[{_def.KEY_MQTT}] failed to add task:{l_name}''')
                 else:
-                    logger.warning('MQTT:{0} disabled'.format(l_mqtt.get('name', _def.MQTT_NAME)))
+                    logger.warning(f'''[{_def.KEY_MQTT}]:{l_name} disabled''')
+        return l_status
 
+#-------------------------------------------------------------------------------
+    def _start_kafka(self):
+        logger.debug('enter')
+
+        if not self._run:
+            return (False)
+
+        l_status = False
+        l_common = self._cfgh.get_cfg(section=_def.KEY_COMMON)
+        l_kafkas = self._cfgh.get_cfg(section=_def.KEY_KAFKA_PRODUCER)
+        if l_kafkas:
+            for l_kafka in l_kafkas:
+                l_name = l_kafka.get('name', _def.KAFKA_NAME)
+                if l_kafka.get('enable', _def.KAFKA_ENABLE):
+                    try:
+                        l_inqueue = asyncio.Queue(maxsize=l_kafka.get('queue_size', _def.KAFKA_QUEUE_SIZE))
+                        l_proc = _kafka(
+                            loop = self._loop,
+                            cfg = l_kafka,
+                            inqueue = l_inqueue,
+                            scheduler = self._scheduler,
+                            nameservers = l_common.get('nameservers', _def.COMMON_NAMESERVERS)
+                        )
+                        l_task = self._loop.create_task(l_proc.run())
+                        self._procs.add(l_name, procItem(proc=l_proc, queue=l_inqueue, task=l_task))
+                        logger.info(f'[{_def.KEY_KAFKA_PRODUCER}] task:{l_name} created')
+                        logger.debug(f'[{_def.KEY_KAFKA_PRODUCER}] proc:{l_proc} task:{l_task}')
+                        l_status = True
+                    except Exception:
+                        logger.exception(f'''[{_def.KEY_KAFKA_PRODUCER}] failed to add task:{l_name}''')
+                else:
+                    logger.warning(f'''[{_def.KEY_KAFKA_PRODUCER}]:{l_name} disabled''')
         return l_status
 
 #-------------------------------------------------------------------------------
@@ -251,38 +285,40 @@ class main_class(mixinSchedulerEvent):
         if not self._run:
             return (False)
 
-        l_common = self._cfgh.get_cfg(section='COMMON')
-        l_ruuvi = self._cfgh.get_cfg(section='RUUVI')
+        l_common = self._cfgh.get_cfg(section=_def.KEY_COMMON)
+        l_ruuvi = self._cfgh.get_cfg(section=_def.KEY_RUUVI)
         if l_ruuvi:
             l_outqueues = {}
             for l_measur in l_ruuvi.get('MEASUREMENTS', None):
-                l_outqueue = self._find_queue(l_measur.get('OUTPUT', None))
+                l_outqueue = self._find_queue(l_measur.get('OUTPUT', _def.RUUVI_OUTPUT))
                 if l_outqueue:
                     l_outqueues = {**l_outqueues, **l_outqueue}
             if l_outqueues:
-                logger.debug('outqueues:{0}'.format(l_outqueues))
+                logger.debug(f'outqueues:{l_outqueues}')
                 try:
+                    l_name = l_ruuvi.get('name', _def.RUUVI_NAME)
                     l_inqueue = asyncio.Queue(maxsize=l_ruuvi.get('queue_size', _def.RUUVI_QUEUE_SIZE))
                     l_proc = _ruuvi(
                         cfg = l_ruuvi,
                         hostname = l_common.get('hostname', _def.COMMON_HOSTNAME),
                         outqueues = l_outqueues,
                         inqueue = l_inqueue,
+                        # fbqueue = self._fbqueue,
                         loop = self._loop,
                         scheduler = self._scheduler
                     )
                     l_task = self._loop.create_task(l_proc.run())
-                    self._procs.add(l_ruuvi.get('name', _def.RUUVI_NAME), procItem(proc=l_proc, queue=l_inqueue, task=l_task))
-                    logger.info('task:{0:s} created'.format(l_ruuvi.get('name', _def.RUUVI_NAME)))
-                    logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
+                    self._procs.add(l_name, procItem(proc=l_proc, queue=l_inqueue, task=l_task))
+                    logger.info(f'[{_def.KEY_RUUVI}] task:{l_name} created')
+                    logger.debug(f'[{_def.KEY_RUUVI}] proc:{l_proc} task:{l_task}')
                     return True
                 except Exception:
-                    logger.exception('failed to add task:{0:s}'.format(l_ruuvi.get('name', _def.RUUVI_NAME)))
+                    logger.exception(f'{_def.KEY_RUUVI}] failed to add task:{l_name}')
             else:
-                logger.error('queue(s) not found:{0}'.format(l_ruuvi.get('OUTPUT', [])))
-                logger.debug('procs:{0}'.format(self._procs))
+                logger.error(f'''[{_def.KEY_RUUVI}] queue(s) not found:{l_ruuvi.get('OUTPUT', _def.RUUVI_OUTPUT)}''')
+                logger.debug(f'''[{_def.KEY_RUUVI}] procs:{self._procs}''')
         else:
-            logger.error('*** RUUVI configuration missing')
+            logger.error(f'''*** [{_def.KEY_RUUVI}] configuration missing''')
 
         return False
 
@@ -292,24 +328,26 @@ class main_class(mixinSchedulerEvent):
 
         if not self._run:
             return False
-        l_ruuvitag = self._cfgh.get_cfg(section='RUUVITAG')
+        l_ruuvitag = self._cfgh.get_cfg(section=_def.KEY_RUUVITAG)
         if l_ruuvitag:
             l_outqueue = self._find_queue(l_ruuvitag.get('ruuviname', _def.RUUVITAG_RUUVINAME))
             try:
+                l_name = l_ruuvitag.get('name', _def.RUUVITAG_NAME)
                 l_proc = _tag(
                     loop = self._loop,
                     scheduler = self._scheduler,
                     collector = l_ruuvitag.get('collector', _def.RUUVITAG_COLLECTOR),
                     outqueue = l_outqueue,
+                    # fbqueue = self._fbqueue,
                     whtlist = l_ruuvitag.get('WHTLIST', None),
                     blklist = l_ruuvitag.get('BLKLIST', None),
+                    adjustment = l_ruuvitag.get('ADJUSTMENT', None),
                     tags = l_ruuvitag.get('TAGS', None),
                     sample_interval = l_ruuvitag.get('sample_interval', _def.RUUVITAG_SAMPLE_INTERVAL),
                     calc = l_ruuvitag.get('calc', _def.RUUVITAG_CALC),
                     calc_in_datas = l_ruuvitag.get('calc_in_datas', _def.RUUVITAG_CALC_IN_DATAS),
                     debug = l_ruuvitag.get('debug', _def.RUUVITAG_DEBUG),
                     device_timeout = l_ruuvitag.get('device_timeout', _def.RUUVITAG_DEVICE_TIMEOUT),
-                    sudo = l_ruuvitag.get('sudo', _def.RUUVITAG_SUDO),
                     device_reset = l_ruuvitag.get('device_reset', _def.RUUVITAG_DEVICE_RESET),
                     whtlist_from_tags = l_ruuvitag.get('whtlist_from_tags', _def.RUUVITAG_WHTLIST_FROM_TAGS),
                     minmax = l_ruuvitag.get('MINMAX', _def.RUUVITAG_MINMAX),
@@ -317,16 +355,16 @@ class main_class(mixinSchedulerEvent):
                 )
                 # start ruuvitag task
                 l_task = self._loop.create_task(l_proc.run())
-                logger.info('task:{0:s} created'.format(l_ruuvitag.get('name', _def.RUUVITAG_NAME)))
-                logger.debug('proc:{0} task:{1}'.format(l_proc, l_task))
-                self._procs.add(l_ruuvitag.get('name', _def.RUUVITAG_NAME), procItem(proc=l_proc, queue=None, task=l_task))
+                self._procs.add(l_name, procItem(proc=l_proc, queue=None, task=l_task))
+                logger.info(f'[{_def.KEY_RUUVITAG}] task:{l_name} created')
+                logger.debug(f'[{_def.KEY_RUUVITAG}] proc:{l_proc} task:{l_task}')
                 return True
             except ValueError:
-                logger.critical(f'*** RUUVITAG start failed')
+                logger.critical(f'*** [{_def.KEY_RUUVITAG}] start failed ValueError')
             except:
-                logger.exception(f'*** RUUVITAG start failed')
+                logger.exception(f'*** [{_def.KEY_RUUVITAG}] start failed')
         else:
-            logger.error('*** RUUVITAG configuration missing')
+            logger.error(f'*** [{_def.KEY_RUUVITAG}] configuration missing')
             
         return False
 
@@ -336,12 +374,13 @@ class main_class(mixinSchedulerEvent):
 
         if self._procs:
             l_procs = self._procs.procs
-            for l_key, l_proc in l_procs.items():
+            for l_key in l_procs.keys():
+                l_proc = l_procs[l_key]
                 l_task = l_proc.task
                 if l_task and not l_task.cancelled():
-#                    if l_proc.proc and hasattr(l_proc.proc, 'shutdown'):
-#                        logger.info(f'shutdown task:{l_key}')
-#                        l_proc.proc.shutdown()
+                    if l_proc.proc and hasattr(l_proc.proc, 'stop'):
+                        logger.info(f'stop task:{l_key}')
+                        l_proc.proc.stop()
                     logger.info(f'cancel task:{l_key}')
                     l_task.cancel()
                     with suppress(asyncio.CancelledError):
@@ -369,42 +408,97 @@ class main_class(mixinSchedulerEvent):
         return (None)
 
 # ------------------------------------------------------------------------------
-if __name__ == '__main__':
+# import sys
+# import os
 
+# def restart_program():
+#     """Restarts the current program.
+#     Note: this function does not return. Any cleanup action (like
+#     saving data) must be done before calling this function."""
+#     python = sys.executable
+#     os.execl(python, python, * sys.argv)
+
+# if __name__ == "__main__":
+#     answer = raw_input("Do you want to restart this program ? ")
+#     if answer.lower().strip() in "y yes".split():
+#         restart_program()
+
+# ==============================================================================
+class check_class():
+#-------------------------------------------------------------------------------
+    def __init__(self, *,
+        config_file = _CFGFILE,
+    ):
+         # read config
+        self._cfgh = None
+        try:
+            self._cfgh = _config(configfile=config_file)
+        except JSONDecodeError:
+            print(f'*** failed to read configuration file: {config_file} - terminating')
+        except ValueError as l_e:
+            print(f'*** ValueError: {l_e}')
+            print(f'*** failed to read configuration file: {config_file} - terminating')
+        except Exception as l_e:
+            print(f'*** exception:{l_e} traceback:{traceback.format_exc()}')
+            print(f'*** failed to read configuration file: {config_file} - terminating')
+
+        try:
+            if self._cfgh:
+                self._cfgh.print()
+        except ValueError as l_e:
+            print(f'*** ValueError: {l_e}')
+            print(f'*** failed to read configuration file: {config_file} - terminating')
+        except Exception as l_e:
+            print(f'*** exception:{l_e} traceback:{traceback.format_exc()}')
+            print(f'*** failed to print configuration file: {config_file} - terminating')
+
+        print('')
+
+# ------------------------------------------------------------------------------
+if __name__ == '__main__':
     l_parser = argparse.ArgumentParser(prog=_PROGRAM_PY, description=f'{_PROGRAM_NAME} {_VERSION}')
     l_parser.add_argument('-c', '--config',  help='<config> ..... configuration file', default=_CFGFILE, required=False,
         type=str, dest='cfgfile', metavar='<config>')
     l_parser.add_argument('-l', '--logconfig',  help='<logconfig> ..... logger configuration file', default=_LOG_CFGFILE, required=False,
         type=str, dest='logcfgfile', metavar='<logconfig>')
-    l_parser.add_argument('-t', '--test',    help='<test> ....... test mode', action='store_true', dest='testmode')
+    l_parser.add_argument('--test',    help='<test> ....... test mode', action='store_true', dest='testmode')
+    l_parser.add_argument('--check',   help='<check> ...... check configuration', action='store_true', dest='checkconfig')
     l_args = l_parser.parse_args()
 
     print('')
     print ('--- {0:s} STARTED {1:s} ---'.format(_PROGRAM_NAME.upper(), str(_dt.now())))
     print('')
-    print('version:             {0}'.format(_VERSION))
-    print('platform:            {0}'.format(sys.platform))
-    print('python:              {0}'.format(platform.python_version()))
-    print('cpu count:           {0}'.format(cpu_count()))
-    print('parent pid:          {0}'.format((os.getpid())))
+    print(f'version:                {_VERSION}')
+    print(f'platform:               {sys.platform}')
+    print(f'python:                 {platform.python_version()}')
+    print(f'cpu count:              {cpu_count()}')
+    print(f'parent pid:             {os.getpid()}')
 
     print('')
     print('COMMANDLINE ARGUMENTS')
     print('-'*21)
-    print('configuration file:  {0}'.format(l_args.cfgfile.strip()))
-    print('logger config:       {0}'.format(l_args.logcfgfile.strip()))
-    print('test mode:           {0}'.format(l_args.testmode))
+    print(f'configuration file:     {l_args.cfgfile.strip()}')
+    print(f'logger config:          {l_args.logcfgfile.strip()}')
+    if l_args.testmode:
+        print(f'test mode:              {l_args.testmode}')
+    if l_args.checkconfig:
+        print(f'check config:           {l_args.checkconfig}')
 
-    l_main = main_class(
-        config_file = l_args.cfgfile.strip(),
-        logconfig_file = l_args.logcfgfile.strip()
-    )
     try:
-        if l_args.testmode:
-            import profile
-            profile.run('l_main.main_func()', sort=1)
+        if l_args.checkconfig:
+            l_main = check_class(
+                config_file = l_args.cfgfile.strip()
+            )
         else:
-            sys.exit(l_main.main_func())
+            l_main = main_class(
+                config_file = l_args.cfgfile.strip(),
+                logconfig_file = l_args.logcfgfile.strip()
+            )
+            if l_args.testmode:
+                import profile
+                profile.run('l_main.main_func()', sort=1)
+            else:
+                sys.exit(l_main.main_func())
     except (Exception) as l_e:
         logger.exception('***')
 

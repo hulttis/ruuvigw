@@ -11,7 +11,8 @@ logger = logging.getLogger('ruuvitag')
 import math
 from .ruuvitag_misc import (
     twos_complement,
-    rshift
+    rshift,
+    get_field_adjustment
 )
 
 _DF = 3
@@ -29,7 +30,7 @@ class ruuvitag_df3(object):
     DF = _DF
 
 # -------------------------------------------------------------------------------
-    def _temperature(self, *, mfdata, minmax):
+    def _temperature(self, *, mfdata, minmax, tagadjustsment):
         """ Temperature in celcius: -127.99 °C to +127.99 °C in 0.01 °C increments """
         l_min = -127.99
         l_max = 127.99
@@ -40,18 +41,19 @@ class ruuvitag_df3(object):
             except:
                 logger.debug(f'>>> minmax not defined: {minmax}')
 
-        l_temp = (mfdata[2] & ~(1 << 7)) + (mfdata[3] / 100)
-        l_sign = (mfdata[2] >> 7) & 1
-        if l_sign:
-            l_temp = l_temp * -1
-    
-        if l_temp < l_min or l_temp > l_max:
-            logger.warning(f'>>> Temperature out of limits: value:{l_temp} min:{l_min} max:{l_max}')
-            raise ValueError(f'Temperature out of limits: value:{l_temp} min:{l_min} max:{l_max}')
-        return round(l_temp, ROUND_TEMPERATURE)
+        l_temperature = (mfdata[2] & ~(1 << 7)) + (mfdata[3] / 100)
+        if ((mfdata[2] >> 7) & 1):
+            l_temperature *= -1
+        l_temperature += get_field_adjustment('temperature', tagadjustsment)    
+        
+        if l_temperature < l_min or l_temperature > l_max:
+            l_txt = f'''Temperature out of limits: value:{l_temperature} min:{l_min} max:{l_max} adjustment:{get_field_adjustment('humidity', tagadjustsment)}'''
+            logger.warning(f'>>> {l_txt}')
+            raise ValueError(l_txt)
+        return round(l_temperature, ROUND_TEMPERATURE)
 
 # -------------------------------------------------------------------------------
-    def _humidity(self, *, mfdata, minmax):
+    def _humidity(self, *, mfdata, minmax, tagadjustsment):
         """ Humidity in %: 0.0 % to 100.0 % in 0.5 % increments """
         l_min = 0
         l_max = 100.0
@@ -63,13 +65,15 @@ class ruuvitag_df3(object):
                 logger.debug(f'>>> minmax not defined: {minmax}')
 
         l_humidity = round((mfdata[1] * 0.5), 1)
+        l_humidity += get_field_adjustment('humidity', tagadjustsment)
         if l_humidity < l_min or l_humidity > l_max:
-            logger.warning(f'>>> Humidity out of limits: value:{l_humidity} min:{l_min} max:{l_max}')
-            raise ValueError(f'Humidity out of limits: value:{l_humidity} min:{l_min} max:{l_max}')
+            l_txt = f'''Humidity out of limits: value:{l_humidity} min:{l_min} max:{l_max} adjustment:{get_field_adjustment('humidity', tagadjustsment)}'''
+            logger.warning(f'>>> {l_txt}')
+            raise ValueError(l_txt)
         return round(l_humidity, ROUND_HUMIDITY)
 
 # -------------------------------------------------------------------------------
-    def _pressure(self, *, mfdata, minmax):
+    def _pressure(self, *, mfdata, minmax, tagadjustsment):
         """ Atmospheric Pressure in hPa; 500 hPa to 1155.36 hPa in 0.01 hPa increments """
         l_min = 500
         l_max = 1155.36
@@ -80,12 +84,14 @@ class ruuvitag_df3(object):
             except:
                 logger.debug(f'>>> minmax not defined: {minmax}')
 
-        l_pres = (mfdata[4] << 8) + mfdata[5] + 50000
-        l_pres = round((l_pres / 100), 2)
-        if l_pres < l_min or l_pres > l_max:
-            logger.warning(f'>>> Pressure out of limits: value:{l_pres} min:{l_min} max:{l_max}')
-            raise ValueError(f'Pressure out of limits: value:{l_pres} min:{l_min} max:{l_max}')
-        return round(l_pres, ROUND_PRESSURE)
+        l_pressure = (mfdata[4] << 8) + mfdata[5] + 50000
+        l_pressure = round((l_pressure / 100), 3)
+        l_pressure += get_field_adjustment('pressure', tagadjustsment)
+        if l_pressure < l_min or l_pressure > l_max:
+            l_txt = f'''Pressure out of limits: value:{l_pressure} min:{l_min} max:{l_max} adjustment:{get_field_adjustment('humidity', tagadjustsment)}'''
+            logger.warning(f'>>> {l_txt}')
+            raise ValueError(l_txt)
+        return round(l_pressure, ROUND_PRESSURE)
 
 # -------------------------------------------------------------------------------
     def _acceleration(self, *, mfdata):
@@ -110,15 +116,15 @@ class ruuvitag_df3(object):
     #         return None
 
 # -------------------------------------------------------------------------------
-    def decode(self, *, mfdata, minmax):
+    def decode(self, *, mfdata, minmax, tagadjustsment):
         try:
             if len(mfdata) >= ruuvitag_df3.DATALEN:
                 l_acc_x, l_acc_y, l_acc_z = self._acceleration(mfdata=mfdata)
                 return {
                     '_df': _DF,
-                    'humidity': self._humidity(mfdata=mfdata, minmax=minmax.get('humidity', None)),
-                    'temperature': self._temperature(mfdata=mfdata, minmax=minmax.get('temperature', None)),
-                    'pressure': self._pressure(mfdata=mfdata, minmax=minmax.get('pressure', None)),
+                    'humidity': self._humidity(mfdata=mfdata, minmax=minmax.get('humidity', None), tagadjustsment=tagadjustsment),
+                    'temperature': self._temperature(mfdata=mfdata, minmax=minmax.get('temperature', None), tagadjustsment=tagadjustsment),
+                    'pressure': self._pressure(mfdata=mfdata, minmax=minmax.get('pressure', None), tagadjustsment=tagadjustsment),
                     'acceleration': round(math.sqrt(l_acc_x * l_acc_x + l_acc_y * l_acc_y + l_acc_z * l_acc_z), ROUND_ACCELERATION),
                     'acceleration_x': l_acc_x,
                     'acceleration_y': l_acc_y,

@@ -16,7 +16,9 @@ import fcntl
 import socket
 import struct
 import asyncio
+import platform
 from contextlib import suppress
+from datetime import datetime as _dt, timedelta as _td
 
 from .ruuvitag_misc import hex_string, get_sec
 from .ble_data import BLEData
@@ -42,15 +44,17 @@ class ruuvitag_socket(object):
     SCAN_TYPE_ACTIVE            = 0x01
     LE_PUBLIC_ADDRESS           = 0x00
     FILTER_POLICY_NO_WHITELIST  = 0x00
+    SCHEDULER_MAX_INSTANCES     = 5
+    HCICONFIG_CMD               = '/bin/hciconfig'
 # ------------------------------------------------------------------------------
-    def __init__(self, *, 
+    def __init__(self, *,
         loop,
         callback,
         scheduler=None,
-        device='hci0', 
-        mfids=None, 
+        device='hci0',
+        mfids=None,
         device_reset=False,
-        device_timeout=10000,
+        device_timeout=10.0,
         **kwargs
     ):
         logger.info(f'>>> device:{device}')
@@ -66,27 +70,23 @@ class ruuvitag_socket(object):
         self._scheduler = scheduler
         self._mfids = mfids
         self._device_reset = device_reset
-        self._device_timeout = (device_timeout/1000)    # ms --> s
+        self._device_timeout = device_timeout
 
         self._task = None
         self._socket = None
         self._data_ts = 0
+        self._device = device
         self._device_id = 0
         if device:
             if isinstance(device, int):
                 self._device_id = device
             else:
                 self._device_id = int(device.replace('hci', ''))
-        logger.info(f'>>> {self}')
+        logger.info(f'>>> {self} initialized')
 
 # -------------------------------------------------------------------------------
     def __repr__(self):
-        return f'ruuvitag_socket device_id:{self._device_id} mfids:{self._mfids} device_reset:{self._device_reset} device_timeout:{self._device_timeout}'
-
-# ------------------------------------------------------------------------------
-    def __del__(self):
-        # logger.debug(f'>>> enter')
-        self.stop()
+        return f'ruuvitag_socket device:{self._device} mfids:{self._mfids} device_reset:{self._device_reset} device_timeout:{self._device_timeout}'
 
 #-------------------------------------------------------------------------------
     def _schedule(self):
@@ -111,9 +111,9 @@ class ruuvitag_socket(object):
                     },
                     id = l_jobid,
                     replace_existing = True,
-                    max_instances = 1,
+                    max_instances = self.SCHEDULER_MAX_INSTANCES,
                     coalesce = True,
-                    next_run_time = _dt.now()+timedelta(seconds=self._device_timeout)
+                    next_run_time = _dt.now()+_td(seconds=self._device_timeout)
                 )
                 logger.info(f'>>> jobid:{l_jobid} scheduled')
             except:
@@ -121,7 +121,7 @@ class ruuvitag_socket(object):
 
 #-------------------------------------------------------------------------------
     async def _do_socket_timeout(self, *,
-        jobid, 
+        jobid,
         reset=False
     ):
         """
@@ -130,25 +130,21 @@ class ruuvitag_socket(object):
         """
         l_now = get_sec()
         if (l_now - self._data_ts) > self._device_timeout:
-            logger.warning(f'>>> jobid:{jobid} device_timeout timer ({self._device_timeout}ms) expired')
+            self._data_ts = l_now
+            logger.warning(f'>>> jobid:{jobid} device_timeout timer ({self._device_timeout}sec) expired')
             try:
-                logger.info(f'>>> jobid:{jobid} restarting device:{self._device_id}')
-                self._close()
-                if reset:
-                    self._device_off()
-                    asyncio.sleep(0.2)
-                    self._device_on()
-                self._open()
+                logger.info(f'>>> jobid:{jobid} closing device:{self._device}')
+                await self._reset()
             except:
                 logger.exception(f'>>> jobid:{jobid}')
 
 # ------------------------------------------------------------------------------
     def _open(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
+        logger.debug(f'>>> device:{self._device}')
 
         if self._socket:
             self._close()
-        
+
         try:
             self._socket = socket.socket(family=socket.AF_BLUETOOTH, type=socket.SOCK_RAW, proto=socket.BTPROTO_HCI)
             self._socket.setblocking(False)
@@ -161,7 +157,7 @@ class ruuvitag_socket(object):
 
 # ------------------------------------------------------------------------------
     def _close(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
+        logger.debug(f'>>> device:{self._device}')
 
         try:
             if self._socket:
@@ -171,9 +167,42 @@ class ruuvitag_socket(object):
             logger.exception(f'>>> exception')
 
 # ------------------------------------------------------------------------------
+    async def _reset(self):
+        logger.debug(f'>>> device:{self._device}')
+
+        self._close()
+        await asyncio.sleep(0.5)
+        if self._device_reset:
+            self._device_off()
+            await asyncio.sleep(0.5)
+            await self._shell_cmd(cmd=f'{self.HCICONFIG_CMD} {self._device} down')
+            await asyncio.sleep(1.0)
+            await self._shell_cmd(cmd=f'{self.HCICONFIG_CMD} {self._device} up')
+            await asyncio.sleep(0.5)
+            self._device_on()
+        self._open()
+
+# ------------------------------------------------------------------------------
+    async def _shell_cmd(self, *, cmd):
+        if platform.system() == 'Linux':
+            logger.info(f'>>> {cmd!r}')
+            l_proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE)
+
+            l_stdout, l_stderr = await l_proc.communicate()
+
+            logger.info(f'>>> {cmd!r} exited with {l_proc.returncode}')
+            if l_stdout:
+                logger.debug(f'>>> stdout: {l_stdout.decode()}')
+            if l_stderr:
+                logger.error(f'>>> stder: {l_stderr.decode()}')
+
+# ------------------------------------------------------------------------------
     def _send_cmd(self, *, cmd, data):
         if self._socket:
-            logger.debug(f'>>> device_id:{self._device_id} cmd:{cmd} data:{data}')
+            logger.debug(f'>>> device:{self._device} cmd:{cmd} data:{data}')
             try:
                 l_arr = array.array('B', data)
                 fcntl.ioctl(self._socket.fileno(), cmd, l_arr)
@@ -183,7 +212,7 @@ class ruuvitag_socket(object):
 # ------------------------------------------------------------------------------
     def _send_cmd_value(self,*, cmd, value):
         if self._socket:
-            logger.debug(f'>>> device_id:{self._device_id} cmd:{value} data:{value}')
+            logger.debug(f'>>> device:{self._device} cmd:{value} data:{value}')
             try:
                 fcntl.ioctl(self._socket.fileno(), cmd, value)
             except:
@@ -192,7 +221,7 @@ class ruuvitag_socket(object):
 # ------------------------------------------------------------------------------
     def _send_data(self, *, data):
         if self._socket:
-            logger.debug(f'>>> device_id:{self._device_id} data:{data}')
+            logger.debug(f'>>> device:{self._device} data:{data}')
             try:
                 self._socket.send(data)
             except:
@@ -201,7 +230,7 @@ class ruuvitag_socket(object):
 # ------------------------------------------------------------------------------
     def _set_filter(self, *, data):
         if self._socket:
-            logger.debug(f'>>> device_id:{self._device_id} data:{data}')
+            logger.debug(f'>>> device:{self._device} data:{data}')
             try:
                 self._socket.setsockopt(socket.SOL_HCI, socket.HCI_FILTER, data)
             except:
@@ -209,17 +238,17 @@ class ruuvitag_socket(object):
 
 # ------------------------------------------------------------------------------
     def _device_on(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
+        logger.debug(f'>>> device:{self._device}')
         self._send_cmd_value(cmd=ruuvitag_socket.HCIDEVUP, value=self._device_id)
 
 # ------------------------------------------------------------------------------
     def _device_off(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
+        logger.debug(f'>>> device:{self._device}')
         self._send_cmd_value(cmd=ruuvitag_socket.HCIDEVDOWN, value=self._device_id)
 
 # ------------------------------------------------------------------------------
     def _set_scan_filter(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
+        logger.debug(f'>>> device:{self._device}')
 
         l_typeMask   = 1 << ruuvitag_socket.HCI_EVENT_PKT
         l_eventMask1 = (1 << ruuvitag_socket.EVT_CMD_COMPLETE) | (1 << ruuvitag_socket.EVT_CMD_STATUS)
@@ -231,7 +260,7 @@ class ruuvitag_socket(object):
 
 # ------------------------------------------------------------------------------
     def _set_scan_parameters(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
+        logger.debug(f'>>> device:{self._device}')
 
         l_len = 7
         l_type = ruuvitag_socket.SCAN_TYPE_ACTIVE
@@ -245,7 +274,7 @@ class ruuvitag_socket(object):
 
 # ------------------------------------------------------------------------------
     def _enable_scan(self, *, enabled=False, filter_duplicates=False):
-        logger.debug(f'>>> device_id:{self._device_id} enabled:{str(enabled)} filter_duplicates:{filter_duplicates}')
+        logger.debug(f'>>> device:{self._device} enabled:{str(enabled)} filter_duplicates:{filter_duplicates}')
 
         l_len = 2
         enable = 0x01 if enabled else 0x00
@@ -256,7 +285,7 @@ class ruuvitag_socket(object):
 
 # ------------------------------------------------------------------------------
     def _start_scanning(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
+        logger.debug(f'>>> device:{self._device}')
 
         self._enable_scan(enabled=False)
         self._set_scan_filter()
@@ -265,7 +294,7 @@ class ruuvitag_socket(object):
 
 # ------------------------------------------------------------------------------
     def _stop_scanning(self):
-        logger.debug(f'>>> device_id:{self._device_id}')
+        logger.debug(f'>>> device:{self._device}')
 
         self._enable_scan(enabled=False)
 
@@ -274,7 +303,7 @@ class ruuvitag_socket(object):
         """
         Gets data from the received socket data
         """
-        # logger.debug(f'>>> device_id:{self._device_id} data:{hex_string(data=data)}')
+        # logger.debug(f'>>> device:{self._device} data:{hex_string(data=data)}')
         try:
             if data[0] == ruuvitag_socket.HCI_EVENT_PKT and data[1] == ruuvitag_socket.EVT_LE_META_EVENT:
                 _, _, l_len = struct.unpack("<BBB", data[:3])
@@ -286,15 +315,16 @@ class ruuvitag_socket(object):
         return (None, 0)
 
 # -------------------------------------------------------------------------------
-    async def _handle_data(self, *, data):        
+    async def _handle_data(self, *, data):
         """
         Handles received data from the socket
         """
-        # logger.debug(f'>>> device_id:{self._device_id} data:{hex_string(data=data)}')
+        # logger.debug(f'>>> device:{self._device} data:{hex_string(data=data)}')
         (l_data, l_len) = await self._get_data(data=data)
         if not l_data:
             return
 
+        self._data_ts = get_sec()
         l_mfid = 0xFFFF
         try:
             l_mac = ":".join(reversed(["{:02X}".format(x) for x in l_data[4:][:6]]))
@@ -303,9 +333,8 @@ class ruuvitag_socket(object):
             l_mfid = (l_data[16] & 0xFF) + ((l_data[17] & 0xFF) * 256)
             if not self._mfids or l_mfid in self._mfids:
                 l_mfdata = l_data[18:l_len-1]
-                logger.debug(f'''>>> device_id:{self._device_id} mac:{l_mac} rssi:{l_rssi} mfid:{l_mfid} mflen:{len(l_mfdata)} mfdata:{hex_string(data=l_mfdata,filler='')}''')
+                logger.debug(f'''>>> device:{self._device} mac:{l_mac} rssi:{l_rssi} mfid:{l_mfid} mflen:{len(l_mfdata)} mfdata:{hex_string(data=l_mfdata,filler='')}''')
                 try:
-                    self._data_ts = get_sec()
                     await self._callback(bledata=BLEData(
                         mac = l_mac,
                         rssi = l_rssi,
@@ -318,15 +347,15 @@ class ruuvitag_socket(object):
         except:
             # logger.exception(f'>>> exception')
             pass
-        
+
         return None
 
 # -------------------------------------------------------------------------------
     async def run(self):
-        logger.info(f'>>> starting')
+        logger.info(f'>>> starting...')
 
         if self._device_reset:
-            logger.info(f'>>> restarting Bluetooth device_id:{self._device_id}')
+            logger.info(f'>>> restarting Bluetooth device:{self._device}')
             self._device_off()
             time.sleep(0.2)
             self._device_on()
@@ -335,9 +364,14 @@ class ruuvitag_socket(object):
         self._open()
         self._start_scanning()
 
+        self._schedule()
+
         while not self._stopevent.is_set():
             try:
-                await self._handle_data(data=await self._loop.sock_recv(self._socket, 1024))
+                if self._socket:
+                    await self._handle_data(data=await self._loop.sock_recv(self._socket, 1024))
+                else:
+                    await asyncio.sleep(10)
             except GeneratorExit:
                 logger.error(f'>>> GeneratorExit')
                 self._stopevent.set()
@@ -346,23 +380,23 @@ class ruuvitag_socket(object):
                 self._stopevent.set()
                 logger.warning(f'>>> CanceledError')
                 break
+            except BrokenPipeError:
+                await self._reset()
+                logger.warning(f'>>>  BrokenPipeError')
             except:
                 logger.exception(f'>>> exception')
                 pass
-        
+
         self._stop_scanning()
         self._close()
 
-        logger.info('>>> completed')
+        logger.info('>>> socket completed')
 
         return True
 
 # -------------------------------------------------------------------------------
     def stop(self):
-        """
-        Stops AF_BLUETOOTH socket
-        """
-        # logger.info(f'>>> stop to receive for AF_BLUETOOTH socket')
+        logger.info(f'>>> socket')
         self._stopevent.set()
 
 # -------------------------------------------------------------------------------

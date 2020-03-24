@@ -11,23 +11,22 @@ logger = logging.getLogger('mqtt')
 import ssl
 import uuid
 import json
+import time
 import asyncio
 import aiomqtt
 import ciso8601
-from datetime import datetime as _dt
-from datetime import timezone
-from datetime import timedelta
+from datetime import datetime as _dt, timezone as _tz, timedelta as _td
 from collections import defaultdict
 
 from mixinQueue import mixinAioQueue as _mixinQueue
-import defaults as _def
+import ruuvigw_defaults as _def
 
 # ==================================================================================
 
 class mqtt_aioclient(_mixinQueue):
-    QUEUE_GET_TIMEOUT = 0.2
-    MQTT_MESSAGE_TIMEOUT = 0.2
-    MQTT_CONNECT_DELAY = 1.0
+    QUEUE_GET_TIMEOUT       = 0.2
+    MQTT_MESSAGE_TIMEOUT    = 0.2
+    MQTT_CONNECT_DELAY      = 1.0
     _conn_error = [
         '0: Connection successful',                                # 0
         '1: Connection refused - incorrect protocol version',      # 1
@@ -36,11 +35,14 @@ class mqtt_aioclient(_mixinQueue):
         '4: Connection refused - bad username or password',        # 4
         '5: Connection refused - not authorised'                   # 5
     ]
+    SCHEDULER_MAX_INSTANCES  = 5
+
 #-------------------------------------------------------------------------------
     def __init__(self, *,
         cfg,
         hostname,
         inqueue,
+        # fbqueue,
         loop,
         scheduler,
         nameservers=None
@@ -49,6 +51,7 @@ class mqtt_aioclient(_mixinQueue):
             cfg - mqtt configuration
             hostname - name of the system
             inqueue - incoming queue for data
+            fbqueue - feedback queue for parent
             loop - asyncio loop
             scheduler - used scheduler for scheduled tasks
             nameservers - list of used name servers
@@ -72,22 +75,25 @@ class mqtt_aioclient(_mixinQueue):
         logger.debug(f'{self._name}')
         self._cfg = cfg
         self._inqueue = inqueue
+        # self._fbqueue = fbqueue
 
         self._stop_event = asyncio.Event()
         self._client = None
-        self._topic = cfg.get('topic', _def.MQTT_TOPIC)
-        self._qos = cfg.get('qos', _def.MQTT_QOS)
-        self._retain = cfg.get('retain', _def.MQTT_RETAIN)
+        # self._topic = cfg.get('topic', _def.MQTT_TOPIC)
+        # self._qos = cfg.get('qos', _def.MQTT_QOS)
+        # self._retain = cfg.get('retain', _def.MQTT_RETAIN)
         self._client_id = f'''{cfg.get('client_id', _def.MQTT_CLIENT_ID)}-{str(uuid.uuid4())[:23]}'''
 
         self._loop = loop
         self._nameservers = nameservers
         self._message_task = None
         self._conn_success = False
+        self._starttime = time.time()
+        self._do_announce = True
 
         self._schedule(scheduler=scheduler)
 
-        logger.debug(f'{self._name} exit')
+        logger.info(f'{self._name} initialized')
 
 #-------------------------------------------------------------------------------
     def _schedule(self, *, scheduler):
@@ -107,9 +113,9 @@ class mqtt_aioclient(_mixinQueue):
                     },                    
                     id = l_jobid,
                     replace_existing = True,
-                    max_instances = 1,
+                    max_instances = self.SCHEDULER_MAX_INSTANCES,
                     coalesce = True,
-                    next_run_time = _dt.now()+timedelta(seconds=l_lwtperiod)
+                    next_run_time = _dt.now()+_td(seconds=l_lwtperiod)
                 )
                 logger.info(f'{self._name} {l_jobid} scheduled lwtperiod:{l_lwtperiod}')
             except:
@@ -167,18 +173,24 @@ class mqtt_aioclient(_mixinQueue):
                 logger.debug(f'{self._name} cert_reqs:{l_cert_reqs} ssl_insecure:{str(l_ssl_insecure)} cafile:{l_cafile}')
             logger.debug(f'''{self._name} host:{l_host} port:{l_port}''')
             l_client.on_connect = on_connect
-            await l_client.connect(host=l_host, port=l_port, keepalive=cfg.get('keepalive', _def.MQTT_KEEPALIVE))
+            # print(f'''host:{l_host} port:{l_port} keepalive:{cfg.get('keepalive', _def.MQTT_KEEPALIVE)}''')
+            await l_client.connect(host=l_host, port=l_port, keepalive=int(cfg.get('keepalive', _def.MQTT_KEEPALIVE)))
             await l_connected.wait()
             if self._conn_success:
                 self._client = l_client
-                logger.info(f'{self._name} connected host:{l_host} port:{l_port} client_id:{self._client_id}')
+                logger.info(f'{self._name} connected host:{l_host} port:{l_port}')
+                logger.info(f'{self._name} connected client_id:{self._client_id}')
                 await self._publish_lwt(payload=self._cfg.get('lwtonline', _def.MQTT_LWTONLINE))
+                self._client.on_message = self._on_message  # on_message fallback
                 return True
             else:
                 await l_client.loop_stop()
                 logger.info(f'{self._name} failed to connected host:{l_host} port:{l_port}')
         except asyncio.CancelledError:
             logger.warning(f'{self._name} CancelledError')
+            raise
+        except ssl.SSLCertVerificationError:
+            # logger.critical(f'{self._name} SSLCertVerificationError')
             raise
         except:
             logger.exception(f'*** {self._name}')
@@ -208,10 +220,15 @@ class mqtt_aioclient(_mixinQueue):
             finally:
                 self._client.on_disconnect = None
                 await self._client.loop_stop()
+                try:
+                    del self._client
+                except:
+                    logger.exception(f'*** {self._name}')
+                    pass
                 self._client = None
 
 #-------------------------------------------------------------------------------
-    async def _subscribe(self, *, topic, qos=1):
+    async def _subscribe(self, *, topic, qos=1, callback=None):
         logger.debug(f'{self._name} topic:{topic} qos:{qos}')
 
         if self._client:
@@ -225,7 +242,8 @@ class mqtt_aioclient(_mixinQueue):
                 self._client.subscribe(topic=topic, qos=qos)
                 await l_subscribed.wait()
                 logger.info(f'{self._name} subscribed topic:{topic}')
-                self._client.on_message = self._on_message
+                if callback:
+                    self._client.message_callback_add(topic, callback)
             except asyncio.CancelledError:
                 logger.warning(f'{self._name} CancelledError')
             except:
@@ -247,6 +265,7 @@ class mqtt_aioclient(_mixinQueue):
                 self._client.on_unsubscribe = on_unsubscribe
                 self._client.unsubscribe(topic=topic)
                 await l_unsubscribed.wait()
+                self._client.message_callback_remove(topic)
                 logger.info(f'{self._name} unsubscribed topic:{topic}')
             except asyncio.CancelledError:
                 logger.warning(f'{self._name} CancelledError')
@@ -285,10 +304,99 @@ class mqtt_aioclient(_mixinQueue):
                 logger.debug(f'{self._name} lwt topic:{l_topic} payload:{payload}')
 
 #-------------------------------------------------------------------------------
+    async def _publish_hb(self):
+        if self._cfg.get('hb', _def.MQTT_HB):
+            l_utc = round(time.time(), 0)
+            l_uptime = round(l_utc - self._starttime, 0)
+            l_payload = {
+                    "timestamp": int(l_utc),
+                    "uptime": int(l_uptime)
+            }
+            logger.debug(f'''{self._name} utc:{l_utc} uptime:{l_uptime}''')
+            await self._publish(
+                topic = self._cfg.get('hbtopic'),
+                qos = self._cfg.get('hbqos', _def.MQTT_HBQOS),
+                retain = self._cfg.get('hbretain', _def.MQTT_HBRETAIN),
+                payload = str(l_payload).replace('\'', '\"').encode()
+            )
+
+#-------------------------------------------------------------------------------
+    async def _announce(self):
+        if self._cfg.get('adprefix', _def.MQTT_ADPREFIX):
+            logger.debug(f'''{self._name}''')
+            try:
+                l_dev = {
+                    'ids': [self._cfg.get('client_id', _def.MQTT_CLIENT_ID)],
+                    'name': f'''{self._cfg.get('client_id', _def.MQTT_CLIENT_ID)}''',
+                    'mdl': _def.PROGRAM_NAME,
+                    'sw': _def.VERSION,
+                    'mf': _def.PROGRAM_COPYRIGHT
+                }
+                l_items = [
+                    {
+                        'topic': self._cfg.get('adprefix') + '/sensor/' + \
+                            self._cfg.get('adnodeid', _def.MQTT_ADNODEID) + '/' + \
+                            f'''{self._cfg.get('client_id', _def.MQTT_CLIENT_ID)}_timestamp''' + '/config',
+                        'payload': {
+                            'dev': l_dev,
+                            'name': f'''{self._cfg.get('client_id', _def.MQTT_CLIENT_ID)} timestamp''',
+                            'state_topic': self._cfg.get('hbtopic'),
+                            'unique_id': f'''{self._cfg.get('client_id', _def.MQTT_CLIENT_ID)}_timestamp''',
+                            'qos':  self._cfg.get('adqos', _def.MQTT_ADQOS),
+                            'dev_cla': 'timestamp',
+                            'icon': 'mdi:clock-outline',
+                            'value_template': '{{ value_json.timestamp | timestamp_local }}'
+                        }
+                    },
+                    {
+                        'topic': self._cfg.get('adprefix') + '/sensor/' + \
+                            self._cfg.get('adnodeid', _def.MQTT_ADNODEID) + '/' + \
+                            f'''{self._cfg.get('client_id', _def.MQTT_CLIENT_ID)}_uptime''' + '/config',
+                        'payload': {
+                            'dev': l_dev,
+                            'name': f'''{self._cfg.get('client_id', _def.MQTT_CLIENT_ID)} uptime''',
+                            'state_topic': self._cfg.get('hbtopic'),
+                            'unique_id': f'''{self._cfg.get('client_id', _def.MQTT_CLIENT_ID)}_uptime''',
+                            'qos':  self._cfg.get('adqos', _def.MQTT_ADQOS),
+                            'icon': 'mdi:timer-sand',
+                            'value_template': '{{ float(value_json.uptime) | round(0) }}'
+                        }
+                    }
+                ]
+                # clear existing auto discoveries in case they exist
+                for l_item in l_items:
+                    if not self._cfg.get('adretain', _def.MQTT_ADRETAIN):
+                        await self._publish(
+                            topic=l_item['topic'], 
+                            payload=b'',
+                            qos=self._cfg.get('adqos', _def.MQTT_ADQOS), 
+                            retain=True
+                        )
+
+                if self._cfg.get('hbad', _def.MQTT_HBAD):
+                    for l_item in l_items:
+                        if self._cfg.get('lwt', _def.MQTT_LWT):
+                            l_item['payload']['availability_topic'] = self._cfg.get('lwttopic')
+                            l_item['payload']['payload_available'] = self._cfg.get('lwtonline', _def.MQTT_LWTONLINE)
+                            l_item['payload']['payload_not_available'] = self._cfg.get('lwtoffline', _def.MQTT_LWTOFFLINE)
+
+                        await self._publish(
+                            topic=l_item['topic'], 
+                            payload=str(l_item['payload']).replace('\'', '\"').encode(), 
+                            qos=self._cfg.get('adqos', _def.MQTT_ADQOS), 
+                            retain=self._cfg.get('adretain', _def.MQTT_ADRETAIN)
+                        )
+
+                return True
+            except:
+                logger.exception(f'*** {self._name}')
+        return False
+
+#-------------------------------------------------------------------------------
     async def _publish(self, *, topic, payload, qos=1, retain=False):
         logger.debug(f'{self._name} topic: {topic} qos:{qos} retain:{retain} type:{type(payload)} payload:{payload}')
 
-        if self._client:
+        if self._client and topic:
             try:
                 if isinstance(payload, str):
                     payload = payload.encode()
@@ -319,27 +427,28 @@ class mqtt_aioclient(_mixinQueue):
              self._message_callback(message=message)
 
 #-------------------------------------------------------------------------------
-    # def shutdown(self):
-    #     self._stop_event.set()
-
-#-------------------------------------------------------------------------------
     def stop(self):
+        logger.info(f'{self._name}')
         self._stop_event.set()
 
 #-------------------------------------------------------------------------------
-    def _dummy_callback(self, *, message):
+    async def _dummy_callback(self, *, message):
         l_payload = message.payload.decode()
         logger.debug(f'{self._name} topic:{message.topic} payload:{l_payload}')
 
 #-------------------------------------------------------------------------------
     async def run(self):
-        logger.info(f'{self._name} start')
+        logger.info(f'{self._name} started')
 
         # self.start_event.set()
         l_exception = False
         try:
             while not self._stop_event.is_set():
                 if self._client:
+                    if self._do_announce: # check is announce is needed
+                        await self._announce()
+                        self._do_announce = False
+                    # inqueue
                     l_item = await self.queue_get(inqueue=self._inqueue)
                     if l_item:
                         if isinstance(l_item, dict):
@@ -356,7 +465,7 @@ class mqtt_aioclient(_mixinQueue):
                             logger.error(f'{self._name} no func in received item')
 
                         logger.debug(f'{self._name} func:{l_func} {self._funcs[l_func]}')
-                        await self._funcs[l_func](topic=self._topic, item=l_item)
+                        await self._funcs[l_func](topic=self._cfg.get('topic', _def.MQTT_TOPIC), item=l_item)
                 else:
                     if not self._client:
                         await self._connect(cfg=self._cfg)
@@ -366,27 +475,30 @@ class mqtt_aioclient(_mixinQueue):
             logger.warning(f'{self._name} CanceledError')
         except GeneratorExit:
             logger.warning(f'{self._name} GeneratorExit')
+        except ssl.SSLCertVerificationError as l_e:
+            logger.critical(f'*** {self._name} SSLCertVerificationError: {l_e}')
+            l_exception = True
         except:
             logger.exception(f'*** {self._name}')
             l_exception = True
         finally:
             await self._disconnect()
             if l_exception:
-                logger.error(f'{self._name} failed')
+                logger.critical(f'*** {self._name} failed')
             else:
-                logger.info(f'{self._name} exit')
+                logger.info(f'{self._name} completed')
 
 #-------------------------------------------------------------------------------
     async def _get_newest(self, *, item):
         logger.debug(f'{self._name} type:{type(item)} {item}')
 
         l_newest_item = None
-        l_newest_ts = _dt(1970,1,1,tzinfo=timezone.utc)
+        l_newest_ts = _dt(1970,1,1,tzinfo=_tz.utc)
         if isinstance(item, list):
             for l_item in item:
                 l_time = l_item.get('time', None)
                 if l_time:
-                    l_ts = ciso8601.parse_datetime(l_time).replace(tzinfo=timezone.utc)
+                    l_ts = ciso8601.parse_datetime(l_time).replace(tzinfo=_tz.utc)
                     if l_ts > l_newest_ts:
                         l_newest_item = l_item
                         l_newest_ts = l_ts
@@ -434,16 +546,26 @@ class mqtt_aioclient(_mixinQueue):
             if isinstance(l_json, list):
                 for l_item in l_json:
                     l_bytes = str(l_item).replace('\'', '\"').encode()
-                    if not await self._publish(topic=topic, payload=l_bytes, qos=self._qos, retain=self._retain):
+                    if not await self._publish(
+                        topic=topic, 
+                        payload=l_bytes, 
+                        qos=self._cfg.get('qos', _def.MQTT_QOS), 
+                        retain=self._cfg.get('retain', _def.MQTT_RETAIN)
+                    ):
                         l_rebuffer = True
             else:
                 l_bytes = str(l_json).replace('\'', '\"').encode()
-                if not await self._publish(topic=topic, payload=l_bytes, qos=self._qos, retain=self._retain):
+                if not await self._publish(
+                    topic=topic, 
+                    payload=l_bytes, 
+                    qos=self._cfg.get('qos', _def.MQTT_QOS), 
+                    retain=self._cfg.get('retain', _def.MQTT_RETAIN)
+                ):
                     l_rebuffer = True
         else:
             l_rebuffer = True
 
-        if self._inqueue and l_rebuffer:
+        if (self._inqueue and l_rebuffer) and _def.MQTT_REBUFFER:
             item['resend'] = True
             await self.queue_put(outqueue=self._inqueue, data=item)
             logger.debug(f'{self._name} jobid:{l_jobid} rebuffer data:{item}')

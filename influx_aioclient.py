@@ -18,21 +18,23 @@ import time
 import json
 import queue
 import ssl
-from datetime import datetime as _dt
-from datetime import timedelta
+from datetime import datetime as _dt, timedelta as _td
 
 from mixinQueue import mixinAioQueue as _mixinQueue
-import defaults as _def
+import ruuvigw_defaults as _def
 
 # ==================================================================================
 
 class influx_aioclient(_mixinQueue):
-    QUEUE_GET_TIMEOUT = 0.2
-    INFLUX_CONNECT_DELAY = 5.0
+    QUEUE_GET_TIMEOUT       = 0.2
+    INFLUX_CONNECT_DELAY    = 5.0
+    SCHEDULER_MAX_INSTANCES = 5
+
 #-------------------------------------------------------------------------------
     def __init__(self, *,
         cfg,
         inqueue,
+        # fbqueue,
         loop,
         scheduler,
         nameservers=None
@@ -40,6 +42,7 @@ class influx_aioclient(_mixinQueue):
         """
             cfg - influx configuration
             inqueue - incoming queue for data
+            fbqueue - feedback queue for parent
             loop - asyncio loop
             scheduler - used scheduler for scheduled tasks
             nameservers - list of used name servers
@@ -62,6 +65,7 @@ class influx_aioclient(_mixinQueue):
         logger.debug(f'{self._name} enter')
         self._cfg = cfg
         self._inqueue = inqueue
+        # self._fbqueue = fbqueue
         l_policy = self._cfg.get('POLICY', None)
         if l_policy:
             self._policy_name = l_policy.get('name', None)
@@ -77,18 +81,12 @@ class influx_aioclient(_mixinQueue):
         self._scheduler = scheduler
         self._schedule(scheduler=scheduler)
         self._nameservers = nameservers
-        logger.debug(f'{self._name} exit')
 
-# -------------------------------------------------------------------------------
-    # def __del__(self):
-    #     self.shutdown()
-        
-#-------------------------------------------------------------------------------
-    # def shutdown(self):
-    #     self._stop_event.set()
+        logger.info(f'{self._name} initialized')
 
 #-------------------------------------------------------------------------------
     def stop(self):
+        logger.info(f'{self._name}')
         self._stop_event.set()
 
 #-------------------------------------------------------------------------------
@@ -107,16 +105,16 @@ class influx_aioclient(_mixinQueue):
                 },
                 id = l_jobid,
                 replace_existing = True,
-                max_instances = 1,
+                max_instances = self.SCHEDULER_MAX_INSTANCES,
                 coalesce = True,
-                next_run_time = _dt.now()+timedelta(seconds=self.INFLUX_CONNECT_DELAY)
+                next_run_time = _dt.now()+_td(seconds=self.INFLUX_CONNECT_DELAY)
             )
         except:
             logger.exception(f'*** {self._name}')
 
 #-------------------------------------------------------------------------------
     async def run(self):
-        logger.info(f'{self._name} start')
+        logger.info(f'{self._name} started')
 
         # self.start_event.set()
         try:
@@ -156,7 +154,7 @@ class influx_aioclient(_mixinQueue):
                 await self._dbcon.close()
                 self._dbcon = None
 
-        logger.info(f'{self._name} done')
+        logger.info(f'{self._name} completed')
 
 #-------------------------------------------------------------------------------
     async def _do_connect(self, *, cfg, jobid):
@@ -485,8 +483,8 @@ class influx_aioclient(_mixinQueue):
                     await self._dbcon.close()
                     self._dbcon = None
                 self._dbcon_reconnect = True
-                # rebuffer unsent data by sending it back to the queue
-            if l_rebuffer or l_reconnect:
+                # rebuffer unsent data by putting it back to the queue
+            if (l_rebuffer or l_reconnect) and _def.INFLUX_REBUFFER:
                 if self._inqueue:
                     item['resend'] = True
                     await self.queue_put(outqueue=self._inqueue, data=item)

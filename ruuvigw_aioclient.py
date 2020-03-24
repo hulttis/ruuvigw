@@ -1,7 +1,7 @@
 # coding=utf-8
 #-------------------------------------------------------------------------------
-# Name:        ruuvi_client.py
-# Purpose:     ruuvi client
+# Name:        ruuvigw_aioclient.py
+# Purpose:     ruuvigw aioclient
 # Copyright:   (c) 2019 TK
 # Licence:     MIT
 #-------------------------------------------------------------------------------
@@ -12,18 +12,19 @@ import asyncio
 
 import time
 import json
-from datetime import datetime as _dt
-from datetime import timedelta
+from datetime import datetime as _dt, timedelta as _td
 from collections import defaultdict
 
 from mixinQueue import mixinAioQueue as _mixinQueue
 from mixinSchedulerEvent import mixinSchedulerEvent
+from aioruuvitag.ruuvitag_misc import get_ms as _get_ms
 from aioruuvitag.ruuvitag_calc import ruuvitag_calc as _tagcalc
-import defaults as _def
+import ruuvigw_defaults as _def
 
 #===============================================================================
 class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
-    QUEUE_PUT_TIMEOUT = 0.2
+    QUEUE_PUT_TIMEOUT       = 0.2
+    SCHEDULER_MAX_INSTANCES = 5
     _func = 'execute_ruuvi'
 #-------------------------------------------------------------------------------
     def __init__(self, *,
@@ -31,6 +32,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         hostname,
         outqueues,
         inqueue,
+        # fbqueue,
         loop,
         scheduler
     ):
@@ -39,6 +41,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
             hostname - name of the system
             outqueues - list of queues for outgoing data (influx(s) / mqtt(s))
             inqueue - incoming queue for data (ruuvitag)
+            fbqueue - feedback queue for parent
             loop - asyncio loop
             scheduler - used scheduler for scheduled tasks
         """
@@ -51,7 +54,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         self._name = cfg.get('name', _def.RUUVI_NAME)
         logger.debug(f'{self._name } enter')
         self._cfg = cfg
-        self._max_interval = int(cfg.get('max_interval', _def.RUUVI_MAX_INTERVAL))
+        self._max_interval = (int(cfg.get('max_interval', _def.RUUVI_MAX_INTERVAL)) * 1000)     # sec --> msec
         self._write_lastdata_int = int(self._cfg.get('write_lastdata_int', _def.RUUVI_WRITE_LASTDATA_INT))
         self._write_lastdata_cnt = int(self._cfg.get('write_lastdata_cnt', _def.RUUVI_WRITE_LASTDATA_CNT))
         if self._write_lastdata_int:
@@ -80,15 +83,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         self._lastdata = defaultdict(dict)
         self._cnt = defaultdict(dict)
 
-        logger.debug(f'{self._name} exit')
-
-# -------------------------------------------------------------------------------
-    # def __del__(self):
-    #     self.shutdown()
-
-#-------------------------------------------------------------------------------
-    # def shutdown(self):
-    #     self._stop_event.set()
+        logger.info(f'{self._name} initialized')
 
 #-------------------------------------------------------------------------------
     def stop(self):
@@ -107,9 +102,9 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
                     seconds = 1,
                     id = l_jobid,
                     replace_existing = True,
-                    max_instances = 1,
+                    max_instances = self.SCHEDULER_MAX_INSTANCES,
                     coalesce = True,
-                    next_run_time = _dt.now()+timedelta(seconds=_def.RUUVI_WRITE_LASTDATA_DELAY)
+                    next_run_time = _dt.now()+_td(seconds=_def.RUUVI_WRITE_LASTDATA_DELAY)
                 )
                 logger.info(f'{self._name} {l_jobid} scheduled')
             except:
@@ -117,7 +112,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
 
 #-------------------------------------------------------------------------------
     async def run(self):
-        logger.info(f'{self._name} start')
+        logger.info(f'{self._name} started')
 
         l_json = None
         if self._inqueue:
@@ -141,7 +136,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         #     for l_mac in self._cnt[l_mea]:
         #         logger.info(f'{self._name} {l_mea} {l_mac} cnt:{self._cnt[l_mea][l_mac]}')
 
-        logger.info(f'{self._name} done')
+        logger.info(f'{self._name} completed')
 
 #-------------------------------------------------------------------------------
     def _update_cnt(self, *, measurname, mac):
@@ -190,7 +185,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         """
         scheduled task
         """
-        l_now = time.time()
+        l_now = _get_ms()
         # logger.debug(f'{self._name}')
 
         if self._write_lastdata_int:
@@ -198,7 +193,8 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
                 for l_measurname, l_tmp_measurdata in await self._get_lastdata_items():
                     # logger.debug(f'{self._name} measur:{l_measurname} data:{l_measurdata}')
                     l_measurdata = {**l_tmp_measurdata}
-                    for l_mac, l_macdata in l_measurdata.items():
+                    for l_mac in l_measurdata.keys():
+                        l_macdata = l_measurdata[l_mac]
                         # logger.debug(f'{self._name} mac:{l_mac} data:{l_macdata}')
                         (l_lasttime, l_datas, l_measur, _, l_xcnt, _) = l_macdata
                         l_tagname = l_datas['tagname']
@@ -269,7 +265,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
 
 #-------------------------------------------------------------------------------
     async def _is_diff(self, *, measur, mac, datas):
-        l_now = time.time()
+        l_now = _get_ms()
         l_measurname = measur.get('name', _def.RUUVI_NAME)
         l_tagname = datas['tagname']
 
@@ -281,7 +277,7 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
 
             # check if max_interval has been passed
             if abs(l_now - l_lasttime) > self._max_interval:
-                logger.debug(f'{self._name} {l_measurname} {mac} {l_tagname} max interval {self._max_interval}s passed')
+                logger.debug(f'{self._name} {l_measurname} {mac} {l_tagname} max interval {self._max_interval/1000} sec passed')
                 l_xtime = l_lasttime + self._max_interval
                 if (l_xtime + self._max_interval) < l_now:
                     l_xtime = l_now
@@ -290,13 +286,17 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
                 return (True, 'max_interval', l_lasttime)
 
             # check maxdelta (maximum allowed value change)
-            for l_field, l_maxdelta in measur.get('MAXDELTA', _def.RUUVI_MAXDELTA).items():
+            l_maxdeltas = measur.get('MAXDELTA', _def.RUUVI_MAXDELTA)
+            for l_field in l_maxdeltas.keys():
+                l_maxdelta = l_maxdeltas[l_field]
                 if not await self._check_maxdelta(measur=measur, mac=mac, datas=datas, field=l_field, maxdelta=l_maxdelta):
                     await self._update_lastdata(measur=measur, mac=mac, xtime=l_now, datas=datas, reason='max_delta '+l_field, xcnt=l_xcnt, ycnt=(l_ycnt+1))
                     return (False, None, 0)
 
             # check delta (minimum change to trigger database update)
-            for l_field, l_delta in measur.get('DELTA', _def.RUUVI_DELTA).items():
+            l_deltas = measur.get('DELTA', _def.RUUVI_DELTA) 
+            for l_field in l_deltas.keys():
+                l_delta = l_deltas[l_field]
                 if not await self._check_delta(measur=measur, mac=mac, datas=datas, field=l_field, delta=l_delta):
                     return (False, None, 0)
 
@@ -359,19 +359,19 @@ class ruuvi_aioclient(_mixinQueue, mixinSchedulerEvent):
         try:
             l_measurname = measur.get('name', _def.RUUVI_NAME)
             l_tagname = datas['tagname']
-            l_now = time.time()
+            l_now = _get_ms()
             logger.debug(f'{self._name} {l_measurname} {mac} {l_tagname} {lasttime} {l_now}')
             l_debugs = {}
             if measur.get('debug', _def.RUUVI_DEBUG):
                 l_debugs['debugReason']                     = reason
                 l_debugs['debugCount']                      = int(self._update_cnt(measurname=l_measurname, mac=mac))
-                l_debugs['debugInterval']                   = int((l_now-lasttime)*1000000) if ((lasttime<l_now) and lasttime) else 0 # us
+                l_debugs['debugInterval']                   = int(l_now-lasttime) if ((lasttime<l_now) and lasttime) else 0 # ms
                 # l_debugs['debugHost']                       = self._cfg.get('hostname', _def.RUUVI_HOSTNAME)
                 if tagdatas:
                     l_debugs['debugTagCount']               = int(tagdatas['count'])
-                    l_debugs['debugTagInterval']            = int(tagdatas['interval'])      # us
-                    l_debugs['debugTagElapsed']             = int(tagdatas['elapsed'])       # us
-                    l_debugs['debugTagRecvTime']            = int(tagdatas['recvtime'])      # us
+                    l_debugs['debugTagInterval']            = int(tagdatas['interval'])      # ms
+                    l_debugs['debugTagRecvTime']            = int(tagdatas['recvtime'])      # ms
+                    # l_debugs['debugTagElapsed']             = int(tagdatas['elapsed'])       # ms
 
             logger.debug(f'{self._name} {l_measurname} {mac} {l_tagname} debugs:{l_debugs}')
             return l_debugs

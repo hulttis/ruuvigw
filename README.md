@@ -1,4 +1,4 @@
-# RUUVI GATEWAY 4.1.1 (200111)
+# RUUVI GATEWAY 4.3.3 (200324)
 This software can be used to collect measurement data from Ruuvitag Bluetooth Low Energy devices https://ruuvi.com/
 
 ## MAIN FUNCTIONALITIES
@@ -71,7 +71,7 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `enable`: [boolean]                       | enable/disable MQTT instance (default: true)                                  |
 | `name`: [string]                          | **unique** name of the MQTT instance (*required*)                             |
 | `client_id`: [string]                     | **unique** client-id (default: `hostname-x`)                                  |
-| `uri`                                     | mqtt url (uri or host/port/username/password/ssl are needed                   |
+| `uri` [string]                            | mqtt url (uri or host/port/username/password/ssl are needed                   |
 | `host`: [string]                          | mqtt host (*required*)                                                        |
 | `port`: [integer]                         | mqtt port (default: 1883 (for ssl 8883))                                      |
 | `ssl`: [boolean]                          | secure mqtt (default: False)                                                  |
@@ -80,42 +80,62 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | `fulljson`: [boolean]                     | send full json object received from the ruuvi client (default: False)         |
 |                                           | useful for storing ruuvitag data to the influx via Node-RED                   |
 | `cert_verify`: [boolean]                  | verify ssl certificates (default: True)                                       |
-| `cafile`: [string]                        | certificate file (full path)                                                  |
+| `cafile`: [string]                        | certificate file (please use full path)                                       |
 | `topic`: [string]                         | mqtt publish topic                                                            |
 | `qos`: [integer]                          | quality of service (default: 1)                                               |
 | `retain`: [boolean]                       | mqtt publish retain (default: false)                                          |
-| `adtopic`: [string]                       | home assistant autodiscovery topic (default: None - no autodiscovery)         |
+| `adprefix`: [string]                      | home assistant autodiscovery prefix (default: None - no autodiscovery)        |
+| `adnodeid`: [string]                      | home assistant autodiscovery nodeid (default: ruuvi)                          |
 | `adretain`: [boolean]                     | home assistant autodiscovery retain (default: false)                          |
-| `anntopic`: [string]                      | home assistant auto discovery announce topic (default: None - not subscribed) |
-| `lwt`: [boolean]                          | enable LWT (Last Will Testament (default: False)                              |
-| &nbsp;&nbsp;&nbsp;`lwttopic`: [string]    | LWT topic (default: `topic`/`client_id`/`lwt`)                                |
+| `cmdtopic`: [string]                      | command topic (default: None - not subscribed)                                |
+|                                           | payload = announce ... home assistant auto discovery                          |
+| `lwt`: [boolean]                          | enable LWT (Last Will Testament) (default: False)                             |
+| &nbsp;&nbsp;&nbsp;`lwttopic`: [string]    | LWT topic (default: `$topic/$client_id/lwt`)                                  |
 | &nbsp;&nbsp;&nbsp;`lwtqos`: [integer]     | LWT quality of service (default: 1)                                           |
-| &nbsp;&nbsp;&nbsp;`lwtretain`: [boolean]  | LWT retain (default: False                                                    |
+| &nbsp;&nbsp;&nbsp;`lwtretain`: [boolean]  | LWT retain (default: False)                                                   |
 | &nbsp;&nbsp;&nbsp;`lwtperiod`: [integer]  | LWT update period in seconds (default: 60)                                    |
 | &nbsp;&nbsp;&nbsp;`lwtonline`: [string]   | LWT online text (default: online)                                             |
-| &nbsp;&nbsp;&nbsp;`lwtoffline`: [string ] | LWT offline text (default: offline)                                           |
+| &nbsp;&nbsp;&nbsp;`lwtoffline`: [string]  | LWT offline text (default: offline)                                           |
+| `hb`: [boolean]                           | enable HEARTBEAT (timestamp of last update) (default: False)                  |
+| &nbsp;&nbsp;&nbsp;`hbtopic`: [string]     | HB topic (default: `$topic/$client_id/hb`)                                    |
+| &nbsp;&nbsp;&nbsp;`hbqos`: [integer]      | HB quality of service (default: 1)                                            |
+| &nbsp;&nbsp;&nbsp;`hbretain`: [boolean]   | HB retain (default: False)                                                    |
+| &nbsp;&nbsp;&nbsp;`hbad`: [boolean]       | HB auto discovery (default: False)                                            |
 | `ADFIELDS`: [object]                      | home assistant auto discovery fields (see *ruuvigw.json*)                     |
 
-| `RUUVITAG`: [object]           | *required*                                                                                     |
-|:-------------------------------|:-----------------------------------------------------------------------------------------------|
-| `name`: [string]               | name of the ruuvitag instance (default: ***ruuvitag***)                                        |
-| `ruuviname`: [string]          | name of the ruuvi instance ruuvitag will be connected (default: ***ruuvi***)                   |
-| `collector`: [string]          | ruuvigw collector `socket`or `bleak` (default: `socket`)                                       |
-|                                | `socket` will fallback to the `bleak`. Windows: `bleak` if forced                              |
-| `sample_interval`: [integer]   | sample interval in ms (default: 1000ms)                                                        |
-| `device_timeout`: [integer]    | hcidump timeout in ms (default: 10000ms)                                                       |
-| `sudo`: [boolean]              | use sudo for hcidump command (default: False). needed if not run as root. set false for docker |
-| `whtlist_from_tags`: [boolean] | generate whitelist from the TAGS                                                               |
-| `TAGS`: [object]               | ruuvitags (see *ruuvigw.json*)                                                                 |
-| `WHTLIST`: [list]              |                                                                                                |
-| `BLKLIST`: [list]              |                                                                                                |
-*NOTE: Two ruuvigw's with `bleak` collector doesn't work at the same time at the same computer*
+| `KAFKA PRODUCER`: [list]               | optional                                                                        |
+|:---------------------------------------|:--------------------------------------------------------------------------------|
+| `enable`: [boolean]                    | enable/disable KAFKA instance (default: true)                                   |
+| `name`: [string]                       | **unique** name of the KAFKA instance (*required*)                              |
+| `client_id`: [string]                  | **unique** client-id (default: `hostname-x`)                                    |
+| `bootstrap_servers` [string] or [list] | kafka server(s)                                                                 |
+| `acks`: [int]                          | kafka acks (default: 1)                                                         |
+| `key`: [string]                        | kafka key (default: None) ($tagname and $tagmac template variables can be used) |
+| `PUBTOPIC`: [string] or [list]         | kafka topics ($tagname and $tagmac template variables can be used)              |
+
+| `RUUVITAG`: [object]           | *required*                                                                   |
+|:-------------------------------|:-----------------------------------------------------------------------------|
+| `name`: [string]               | name of the ruuvitag instance (default: ***ruuvitag***)                      |
+| `ruuviname`: [string]          | name of the ruuvi instance ruuvitag will be connected (default: ***ruuvi***) |
+| `device`: [string]             | device name (default: `hci0`)                                                |
+| `collector`: [string]          | ruuvigw collector `socket`or `bleak` (default: `socket`)                     |
+|                                | `socket` will fallback to the `bleak`. Windows: `bleak` if forced            |
+| `sample_interval`: [float]     | sample interval in ms (default: 1.0 sec)                                     |
+| `device_timeout`: [float]      | hcidump timeout in ms (default: 10.0 sec)                                    |
+| `device_reset` : [boolean]     | restart device instead of close/open in case of failure                      |
+| `whtlist_from_tags`: [boolean] | generate whitelist from the TAGS                                             |
+| `TAGS`: [object]               | ruuvitags (see *ruuvigw.json*)                                               |
+| `WHTLIST`: [list]              |                                                                              |
+| `BLKLIST`: [list]              |                                                                              |
+| `ADJUSTMENT`: [dict]           | ruuvitag value adjustment for  `temperature`, `humidity` and/or `pressure`   |
+|                                | (see *ruuvigw.json*)                                        |
+*NOTE: Multiple ruuvigw's with `bleak` collector doesn't work at the same time in the same computer*
 
 | `RUUVI`: [object]         | *required*                                                                                         |
 |:--------------------------|:---------------------------------------------------------------------------------------------------|
 | `name`: [string]          | name of the ruuvi instance (default: ***ruuvi***)                                                  |
 |                           | note: used also as InfluxDB measurement name. Need to match with RUUVITAG.ruuviname                |
-| `max_interval`: [integer] | max data interval interval (default:60s)                                                           |
+| `max_interval`: [float]   | max data interval interval (default:60.0 sec)                                                      |
 | `MEASUREMENTS`: [object]  | Ruuvi measurements                                                                                 |
 | `name`: [string]          | measurement name                                                                                   |
 | `calcs`: [boolean]        | calculate equilibriumVaporPressure, absoluteHumidity, dewPoint, airDensity fields (default: false) |

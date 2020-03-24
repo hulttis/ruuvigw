@@ -17,6 +17,10 @@ def get_us():
         return int(time.perf_counter()*1000000)
 
 # ------------------------------------------------------------------------------
+def get_ms():
+    return get_us()/1000
+
+# ------------------------------------------------------------------------------
 def get_sec():
     return int(time.perf_counter())
     
@@ -36,3 +40,12 @@ def twos_complement(val, bits):
         val = val - (1 << bits)
     return val
 
+# -------------------------------------------------------------------------------
+def get_field_adjustment(field, tagadjustsment):
+    if not tagadjustsment:
+        return 0
+    try:
+        return tagadjustsment[field]
+    except:
+        return 0
+    return 0        

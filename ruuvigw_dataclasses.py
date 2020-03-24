@@ -1,7 +1,7 @@
 # coding=utf-8
 #-------------------------------------------------------------------------------
-# Name:        ruuvi_dataclasses.py
-# Purpose:     dataclasses
+# Name:        ruuvigw_dataclasses.py
+# Purpose:     ruuvigw dataclasses
 # Copyright:   (c) 2019 TK
 # Licence:     MIT
 #-------------------------------------------------------------------------------

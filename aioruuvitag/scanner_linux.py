@@ -7,17 +7,37 @@ Created by hbldh <henrik.blidh@nedomkull.com>
 
 """
 import logging
-logger = logging.getLogger('ruuvitag')
+logger = logging.getLogger('bleak_scanner')
 
 import asyncio
 import queue
 
-from bleak.backends.device import BLEDevice
-from bleak.backends.bluezdbus import reactor, defs
-from bleak.backends.bluezdbus.utils import validate_mac_address
+from .scanner_bledevice import BLEDevice
+# import scanner_bluezdbus_defs as defs
+from .scanner_bluezdbus_utils import validate_mac_address
 
 # txdbus.client MUST be imported AFTER bleak.backends.bluezdbus.reactor!
 from txdbus import client
+from txdbus.error import RemoteError
+from twisted.internet.asyncioreactor import AsyncioSelectorReactor
+from twisted.internet.error import ReactorNotRunning
+
+# DBus Interfaces
+OBJECT_MANAGER_INTERFACE = "org.freedesktop.DBus.ObjectManager"
+# PROPERTIES_INTERFACE = "org.freedesktop.DBus.Properties"
+
+# Bluez specific DBUS
+BLUEZ_SERVICE = "org.bluez"
+# ADAPTER_INTERFACE = "org.bluez.Adapter1"
+DEVICE_INTERFACE = "org.bluez.Device1"
+# BATTERY_INTERFACE = "org.bluez.Battery1"
+
+# GATT interfaces
+# GATT_MANAGER_INTERFACE = "org.bluez.GattManager1"
+# GATT_PROFILE_INTERFACE = "org.bluez.GattProfile1"
+# GATT_SERVICE_INTERFACE = "org.bluez.GattService1"
+# GATT_CHARACTERISTIC_INTERFACE = "org.bluez.GattCharacteristic1"
+# GATT_DESCRIPTOR_INTERFACE = "org.bluez.GattDescriptor1"
 
 QUEUE_SIZE = 100
 ###############################################################################
@@ -75,21 +95,25 @@ async def scanner(
 ):
     """Perform a continuous Bluetooth LE Scan
     Args:
+        loop: async event loop
         outqueue:  outgoing queue
         stopevent: stop event
         device: bluetooth device
 
     """
+    logger.info(f'>>> scanner:linux device:{device}')
+
     q = queue.Queue(QUEUE_SIZE)
     devices = {}
     cached_devices = {}
     rules = list()
+
 # -----------------------------------------------------------------------------
     def queue_put(msg_path):
         try:
             if msg_path in devices:
                 props = devices[msg_path]
-                name, address, _, path = _device_info(msg_path, props)
+                name, address, _, _ = _device_info(msg_path, props)
                 # logger.debug(f'>>> {name} {path} {address}')
                 if q and address:
                     q.put(BLEDevice(
@@ -116,12 +140,13 @@ async def scanner(
             devices[msg_path] = ({**devices[msg_path], **device_interface} if msg_path in devices else device_interface)
 
             # put BLEDevice object to the queue
+            logger.debug(f'>>> InterfacesAdded body:{msg_path}')
             queue_put(msg_path)
         elif message.member == "PropertiesChanged":
-            # logger.debug(f'>>> {message.member} {message.path}:{message.body}')
+            logger.debug(f'>>> {message.member} {message.path}:{message.body}')
             msg_path = message.path
-            iface, changed, invalidated = message.body
-            if iface != defs.DEVICE_INTERFACE:
+            iface, changed, _ = message.body
+            if iface != DEVICE_INTERFACE:
                 return
 
             # store changed info
@@ -130,85 +155,121 @@ async def scanner(
             devices[msg_path] = ({**devices[msg_path], **changed} if msg_path in devices else changed)
 
             # put BLEDevice object to the queue
+            logger.debug(f'>>> PropertiesChanged body:{msg_path}')
             queue_put(msg_path)
+        elif message.member == "InterfacesRemoved":
+            logger.debug(f'>>> {message.member} {message.path}:{message.body}')
+            return
+        else:
+            msg_path = message.path
+            logger.warning(
+                "{0}, {1} ({2}): {3}".format(
+                    message.member, message.interface, message.path, message.body
+                )
+            )
 
 # -----------------------------------------------------------------------------
+    try:
+        logger.info(f'>>> Starting...')
+        # Connect to the txdbus
+        reactor = AsyncioSelectorReactor(loop)
+        bus = await client.connect(reactor, "system").asFuture(loop)
 
-    # Connect to the txdbus
-    bus = await client.connect(reactor, "system").asFuture(loop)
+        # Add signal listeners
+        rules.append(
+            await bus.addMatch(
+                parse_msg,
+                interface="org.freedesktop.DBus.ObjectManager",
+                member="InterfacesAdded",
+            ).asFuture(loop)
+        )
+        rules.append(
+            await bus.addMatch(
+                parse_msg,
+                interface="org.freedesktop.DBus.ObjectManager",
+                member="InterfacesRemoved",
+            ).asFuture(loop)
+        )
+        rules.append(
+            await bus.addMatch(
+                parse_msg,
+                interface="org.freedesktop.DBus.Properties",
+                member="PropertiesChanged",
+            ).asFuture(loop)
+        )
 
-    # Add signal listeners
-    rules.append(
-        await bus.addMatch(
-            parse_msg,
-            interface="org.freedesktop.DBus.ObjectManager",
-            member="InterfacesAdded",
+        # Find the HCI device to use for scanning and get cached device properties
+        objects = await bus.callRemote(
+            "/",
+            "GetManagedObjects",
+            interface=OBJECT_MANAGER_INTERFACE,
+            destination=BLUEZ_SERVICE,
         ).asFuture(loop)
-    )
-    rules.append(
-        await bus.addMatch(
-            parse_msg,
-            interface="org.freedesktop.DBus.ObjectManager",
-            member="InterfacesRemoved",
+        adapter_path, interface = _filter_on_adapter(objects, device)
+        logger.info(f'>>> device:{device} adapter_path:{adapter_path}')
+        logger.debug(f'>>> interface:{interface}')
+        cached_devices = dict(_filter_on_device(objects))
+        logger.debug(f">>> cached_devices:{cached_devices}")
+
+        # Running Discovery loop.
+        await bus.callRemote(
+            adapter_path,
+            "SetDiscoveryFilter",
+            interface="org.bluez.Adapter1",
+            destination="org.bluez",
+            signature="a{sv}",
+            body=[{"Transport": "le"}],
         ).asFuture(loop)
-    )
-    rules.append(
-        await bus.addMatch(
-            parse_msg,
-            interface="org.freedesktop.DBus.Properties",
-            member="PropertiesChanged",
+        await bus.callRemote(
+            adapter_path,
+            "StartDiscovery",
+            interface="org.bluez.Adapter1",
+            destination="org.bluez",
         ).asFuture(loop)
-    )
 
-    # Find the HCI device to use for scanning and get cached device properties
-    objects = await bus.callRemote(
-        "/",
-        "GetManagedObjects",
-        interface=defs.OBJECT_MANAGER_INTERFACE,
-        destination=defs.BLUEZ_SERVICE,
-    ).asFuture(loop)
-    adapter_path, interface = _filter_on_adapter(objects, device)
-    cached_devices = dict(_filter_on_device(objects))
-
-    # Running Discovery loop.
-    await bus.callRemote(
-        adapter_path,
-        "SetDiscoveryFilter",
-        interface="org.bluez.Adapter1",
-        destination="org.bluez",
-        signature="a{sv}",
-        body=[{"Transport": "le"}],
-    ).asFuture(loop)
-    await bus.callRemote(
-        adapter_path,
-        "StartDiscovery",
-        interface="org.bluez.Adapter1",
-        destination="org.bluez",
-    ).asFuture(loop)
-
-    # Run Communication loop
-    while not stopevent.is_set():
-        try:
-            l_data = q.get_nowait()
-            if l_data and outqueue:
-                await outqueue.put(l_data)
-        except queue.Empty:
+        # Run Communication loop
+        while not stopevent.is_set():
             try:
-                await asyncio.sleep(0.1)
-            except asyncio.CancelledError:
-                logger.warning(f'>>> CancelledError')
-                pass
-        except:
-            logger.exception(f'>>> exception')
+                l_data = q.get_nowait()
+                if l_data and outqueue:
+                    await outqueue.put(l_data)
+            except queue.Empty:
+                try:
+                    await asyncio.sleep(0.1)
+                except asyncio.CancelledError:
+                    logger.warning(f'>>> CancelledError')
+                    break
+            except:
+                logger.exception(f'>>> exception')
+                break
+        try:
+            await bus.callRemote(
+                adapter_path,
+                "StopDiscovery",
+                interface="org.bluez.Adapter1",
+                destination="org.bluez",
+            ).asFuture(loop)
+        except RemoteError:
+            logger.error(f'>>> RemoteError')
+    except: 
+        logger.exception(f'>>> exception')
 
     # Stop discovery
-    await bus.callRemote(
-        adapter_path,
-        "StopDiscovery",
-        interface="org.bluez.Adapter1",
-        destination="org.bluez",
-    ).asFuture(loop)
+    logger.info(f'>>> Disconnecting...')
     for rule in rules:
         await bus.delMatch(rule).asFuture(loop)
+    rules.clear()
     # Disconnect txdbus client
-    bus.disconnect()
+
+    try:
+        bus.disconnect()
+    except Exception as l_e:
+        logger.error(f'>>> Attempt to disconnect system bus failed: {l_e}')
+
+    try:
+        reactor.stop()
+    except ReactorNotRunning as l_e:
+        logger.error(f'>>> Attempt to stop reactor failed: {l_e}')
+
+    bus = None
+    reactor = None

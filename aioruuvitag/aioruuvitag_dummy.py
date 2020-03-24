@@ -17,7 +17,7 @@ class ruuvitag_dummy(object):
         print(f'>>> one of them is required to run ruuvigw                                       <<<')
         print(f'>>> check RUUVITAG.collector setting                                             <<<')
         print(f'>>>                                                                              <<<')
-        print(f'>>> hcitool can be installed by: sudo apt -y install bluez bluez-hcitool         <<<')
+        print(f'>>> bluez (requided: >= 5.43) can be installed by: sudo apt -y install bluez     <<<')
         print(f'>>> for AF_BLUETOOTH socket support you might need to compile own python version <<<')
         print(f'>>> recommended to use Python 3.8.0 (3.7.4 should work as well)                  <<<')
         print(f'>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')

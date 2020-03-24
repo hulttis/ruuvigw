@@ -21,7 +21,7 @@ class ruuvitag_decode():
     DF_8 = _df8.DF
 # -------------------------------------------------------------------------------
     @staticmethod
-    def decode(*, mfdata, minmax):
+    def decode(*, mfdata, minmax, tagadjustsment):
         """ 
         Decodes received rawdata with the correct decoder based on the dataformat 
         Returns json
@@ -29,7 +29,7 @@ class ruuvitag_decode():
         try:
             l_decoder = ruuvitag_decode._decoder(mfdata=mfdata)
             if l_decoder:
-                return l_decoder.decode(mfdata=mfdata, minmax=minmax)
+                return l_decoder.decode(mfdata=mfdata, minmax=minmax, tagadjustsment=tagadjustsment)
             else:
                 return None
         except ValueError:

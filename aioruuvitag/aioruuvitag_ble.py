@@ -12,12 +12,11 @@ import asyncio
 import time
 import json
 from collections import defaultdict
-from datetime import datetime as _dt
-from datetime import timezone
+from datetime import datetime as _dt, timezone as _tz
 
 from .ruuvitag_decode import ruuvitag_decode as _tagdecode
 from .ruuvitag_calc import ruuvitag_calc as _tagcalc
-from .ruuvitag_misc import get_us as _get_us
+from .ruuvitag_misc import get_ms as _get_ms
 
 from .ruuvitag_df3 import ruuvitag_df3 as _df3
 from .ruuvitag_df5 import ruuvitag_df5 as _df5
@@ -53,23 +52,23 @@ DEFAULT_MFIDS = [1177]
 class aioruuvitag_ble(object):
     """
     asyncio ruuvitag_ble_linux communication and data convert
-    
+
     puts converted ruuvitag data to queue as json
     or
     calls async callback(json=data)
     See consumer.py and callback.py
-    
+
      sample json data (calc_in_datas:False): {
-        'mac': 'CB:D7:18:26:DA:B4', 
+        'mac': 'CB:D7:18:26:DA:B4',
         'datas': {
             '_df': 5, 'humidity': 52.62, 'temperature': 29.34, 'pressure': 1005.48, 'acceleration': 1014.101, 'acceleration_x': -796, 'acceleration_y': -628, 'acceleration_z': -20, 'tx_power': 4, 'battery': 2827, 'movement_counter': 154, 'sequence_number': 25121, 'tagid': 'CB:D7:18:26:DA:B4', 'rssi': -68, 'tagname': '102livingroom', 'time': '2019-11-16T11:32:36.636133+0000'
-        }, 
+        },
         'calcs': {
             'equilibriumVaporPressure': 4087.045, 'absoluteHumidity': 15.409, 'dewPoint': 18.666, 'airDensity': 0.221
         }
     }
     sample json data (calc_in_datas:True): {
-        'mac': 'CB:D7:18:26:DA:B4', 
+        'mac': 'CB:D7:18:26:DA:B4',
         'datas': {
             '_df': 5, 'humidity': 52.62, 'temperature': 29.34, 'pressure': 1005.48, 'acceleration': 1014.101, 'acceleration_x': -796, 'acceleration_y': -628, 'acceleration_z': -20, 'tx_power': 4, 'battery': 2827, 'movement_counter': 154, 'sequence_number': 25121, 'tagid': 'CB:D7:18:26:DA:B4', 'rssi': -68, 'tagname': '102livingroom', 'time': '2019-11-16T11:35:23.481096+0000', 'equilibriumVaporPressure': 4087.045, 'absoluteHumidity': 15.409, 'dewPoint': 18.666, 'airDensity': 0.221
         }
@@ -82,16 +81,17 @@ class aioruuvitag_ble(object):
         scheduler,
         collector='socket' if platform.system() == 'Linux' else 'bleak',
         outqueue=None,
+        # fbqueue=None,
         callback=None,
         whtlist=[],
         blklist=[],
+        adjustment={},
         tags={},
-        sample_interval=1000,   # ms
+        sample_interval=1.0,   
         calc=False,
         calc_in_datas=False,
-        debug=False, 
-        sudo=True, 
-        device_reset=False, 
+        debug=False,
+        device_reset=False,
         device_timeout=10000,   # ms
         whtlist_from_tags=True,
         minmax=DEFAULT_MINMAX,
@@ -102,19 +102,21 @@ class aioruuvitag_ble(object):
         scheduler - AsyncIOScheduler to schedule periodical tasks
         collector - 'socket' or 'bleak' or 'hcidump'
         outqueue - output queue (Default: None)
+        fbqueue - feedback queue for parent (Default: None)
         callback - async callback(json=data) function to handle data in case other handling than put to the queue is needed
         whtlist - ble mac whitelist (default:[])
             ['D2:C2:5E:F0:11:D1', 'CB:D7:18:26:DA:B4']
         blklist - ble mac blacklist (default:[])
             ['D2:C2:5E:F0:11:D1', 'CB:D7:18:26:DA:B4']
+        adjustment - tag value adjustments (default: {})
+            {"D2:C2:5E:F0:11:D1": {"temperature": 1.0, "humidity": -10.0}, "CB:D7:18:26:DA:B4": {"pressure": 5.0}}
         tags -  ruuvitag mac/name mapping(default:{}). Keys used as whtlist if whtlist not defined
             { 'D2:C2:5E:F0:11:D1': '102bedroom',
               'CB:D7:18:26:DA:B4': '102livingroom' }
-        sample_interval - minimum sample interval (default:1000) in ms
+        sample_interval - minimum sample interval (default:1.0) in sec
         calc - do calculations (Default: False)
         calc_in_datas - include calcs in "datas" (Default: False) instead of "calcs", see above
         debug - "_aioruuvitag" included to the jsondata (Default: False), see above
-        sudo - use sudo for shell commands (Default: False)
         device_reset - reset hcix device (not implemented for hcidump)
         device_timeout - timeout (ms) to restart device if no data received
         whtlist_from_tags - use tags as whitelist in case whtlist not given (Default: True)
@@ -193,9 +195,11 @@ class aioruuvitag_ble(object):
             raise ValueError(f'ruuvitag_dummy')
 
         self._outqueue = outqueue
+        # self._fbqueue = fbqueue        
         self._callback = callback
         self._whtlist = whtlist
         self._blklist = blklist
+        self._adjustment = adjustment
         self._tags = tags
         self._sample_interval = sample_interval
         self._calc = calc
@@ -217,17 +221,13 @@ class aioruuvitag_ble(object):
         if not self._tags:
             logger.info(f'>>> tags empty')
             self._tags = {}
-        
-        logger.debug(f'>>> {self}')
+
+        logger.debug(f'>>> aioruuvitag_ble {self}')
+        logger.info(f'>>> aioruuvitag_ble initialized')
 
 # -------------------------------------------------------------------------------
     def __repr__(self):
-        return f'aioruuvitag_ble interval:{self._sample_interval} calc:{str(self._calc)} calc_in_datas:{str(self._calc_in_datas)} whtlist:{self._whtlist} blklist:{self._blklist} tags:{self._tags} minmax:{self._minmax} callback:{self._callback} outqueue:{self._outqueue} debug:{self._debug}'
-
-# -------------------------------------------------------------------------------
-    # def __del__(self):
-    #     logger.debug(f'>>> {self}')
-    #     self.stop()
+        return f'interval:{self._sample_interval}sec calc:{str(self._calc)} calc_in_datas:{str(self._calc_in_datas)} whtlist:{self._whtlist} blklist:{self._blklist} tags:{self._tags} minmax:{self._minmax} callback:{self._callback} outqueue:{self._outqueue} debug:{self._debug}'
 
 # -------------------------------------------------------------------------------
     def _update_cnt(self, *, mac):
@@ -240,35 +240,31 @@ class aioruuvitag_ble(object):
         return l_cnt
 
 # -------------------------------------------------------------------------------
-    def _update_us(self, *, mac):
-        """ Updates last us per mac """
+    def _update_ms(self, *, mac):
+        """ Updates last ms per mac """
         try:
-            l_us = self._lasttime[mac]
+            l_ms = self._lasttime[mac]
         except:
-            l_us = 0
-        l_now = _get_us()
+            l_ms = 0
+        l_now = _get_ms()
         self._lasttime[mac] = l_now
-        return int(l_now-l_us) if ((l_us<l_now) and l_us) else 0
+        return int(l_now-l_ms) if ((l_ms<l_now) and l_ms) else 0
 
 # -------------------------------------------------------------------------------
     def _checkinterval(self, *, mac, interval):
         """ Checks minimum update interval per mac """
         try:
-            l_epoc = self._lasttime[mac]
+            l_last = self._lasttime[mac]
         except:
-            l_epoc = 0
-        l_now = time.time()*1000
-        if (l_now-l_epoc) > interval:
-            return True
-
-        return False
+            l_last = 0
+        return True if (_get_ms()-l_last) > interval else False
 
 # -------------------------------------------------------------------------------
     def _checkmaclists(self, *, mac):
         """ Checks mac lists"""
         # check if blacklisted
         if mac in self._blklist:
-            logger.debug(f'>>> {lmac_mac} blacklisted')
+            logger.debug(f'>>> {mac} blacklisted')
             return False
         # check if not whitelisted
         if len(self._whtlist) and mac not in self._whtlist:
@@ -278,11 +274,12 @@ class aioruuvitag_ble(object):
             return False
 
         return True
+
 # -------------------------------------------------------------------------------
     async def _handle_bledata(self, *, bledata):
-        """ 
-        Handles received bledata from hcidump/socket. 
-        Puts json formated result to the outqueue or calls callback function with it 
+        """
+        Handles received bledata from hcidump/socket.
+        Puts json formated result to the outqueue or calls callback function with it
         """
         l_mac = bledata.mac
         l_mfdata = bledata.mfdata(mfid=0x499)
@@ -294,16 +291,20 @@ class aioruuvitag_ble(object):
             if not self._checkmaclists(mac=l_mac):
                 return
             # check if it is sample time
-            if not self._checkinterval(mac=l_mac, interval=self._sample_interval):
+            if not self._checkinterval(mac=l_mac, interval=(self._sample_interval*1000)):   # sec --> ms
                 return
 
-            l_datas = _tagdecode.decode(mfdata=l_mfdata, minmax=self._minmax)
+            try:
+                l_tagadjustsment = self._adjustment[l_mac]
+            except:
+                l_tagadjustsment = None
+            l_datas = _tagdecode.decode(mfdata=l_mfdata, minmax=self._minmax, tagadjustsment=l_tagadjustsment)
             if l_datas:
                 try:
                     l_datas['tagname'] = self._tags[l_mac]
                 except:
                     pass
-                l_datas['time'] = _dt.utcfromtimestamp(bledata.time).replace(tzinfo=timezone.utc).strftime(aioruuvitag_ble._timefmt)
+                l_datas['time'] = _dt.utcfromtimestamp(bledata.time).replace(tzinfo=_tz.utc).strftime(aioruuvitag_ble._timefmt)
                 if bledata.rssi:
                     l_datas['rssi'] = bledata.rssi
                 l_outdata = {'mac': l_mac, 'datas':l_datas}
@@ -317,9 +318,12 @@ class aioruuvitag_ble(object):
                     l_ruuvidata.clear()
                     l_ruuvidata['blklist'] = self._blklist
                     l_ruuvidata['count'] = self._update_cnt(mac=l_mac)
-                    l_ruuvidata['interval'] = self._update_us(mac=l_mac)
-                    l_ruuvidata['recvtime'] = bledata.time
+                    l_ruuvidata['interval'] = self._update_ms(mac=l_mac)
+                    l_ruuvidata['recvtime'] = bledata.time*1000
                     l_outdata['_aioruuvitag'] = l_ruuvidata
+                else:
+                    self._update_cnt(mac=l_mac)
+                    self._update_ms(mac=l_mac)
 
                 logger.debug(f'>>> {l_mac} outdata:{l_outdata}')
                 if self._callback:
@@ -358,5 +362,5 @@ class aioruuvitag_ble(object):
     def stop(self):
         """ Stops ble collector """
         if self._collector:
-            # logger.info(f'>>> stopping {self._collector}')
+            logger.info(f'>>> stopping {self._collector}')
             self._collector.stop()
