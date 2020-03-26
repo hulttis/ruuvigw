@@ -1,4 +1,4 @@
-# RUUVI GATEWAY 4.3.3 (200324)
+# RUUVI GATEWAY 4.3.4 (200326)
 This software can be used to collect measurement data from Ruuvitag Bluetooth Low Energy devices https://ruuvi.com/
 
 ## MAIN FUNCTIONALITIES
@@ -103,15 +103,15 @@ This software can be used to collect measurement data from Ruuvitag Bluetooth Lo
 | &nbsp;&nbsp;&nbsp;`hbad`: [boolean]       | HB auto discovery (default: False)                                            |
 | `ADFIELDS`: [object]                      | home assistant auto discovery fields (see *ruuvigw.json*)                     |
 
-| `KAFKA PRODUCER`: [list]               | optional                                                                        |
-|:---------------------------------------|:--------------------------------------------------------------------------------|
-| `enable`: [boolean]                    | enable/disable KAFKA instance (default: true)                                   |
-| `name`: [string]                       | **unique** name of the KAFKA instance (*required*)                              |
-| `client_id`: [string]                  | **unique** client-id (default: `hostname-x`)                                    |
-| `bootstrap_servers` [string] or [list] | kafka server(s)                                                                 |
-| `acks`: [int]                          | kafka acks (default: 1)                                                         |
-| `key`: [string]                        | kafka key (default: None) ($tagname and $tagmac template variables can be used) |
-| `PUBTOPIC`: [string] or [list]         | kafka topics ($tagname and $tagmac template variables can be used)              |
+| `KAFKA PRODUCER`: [list]               | optional                                                                           |
+|:---------------------------------------|:-----------------------------------------------------------------------------------|
+| `enable`: [boolean]                    | enable/disable KAFKA instance (default: true)                                      |
+| `name`: [string]                       | **unique** name of the KAFKA instance (*required*)                                 |
+| `client_id`: [string]                  | **unique** client-id (default: `hostname-x`)                                       |
+| `bootstrap_servers` [string] or [list] | kafka server(s)                                                                    |
+| `acks`: [int]                          | kafka acks (default: 1)                                                            |
+| `key`: [string]                        | kafka key (default: None) (`$tagname`, `$tagmac` and `$tagdataFormat` can be used) |
+| `PUBTOPIC`: [string] or [list]         | kafka topics (`$tagname`, `$tagmac` and `$tagdataFormat` can be used)              |
 
 | `RUUVITAG`: [object]           | *required*                                                                   |
 |:-------------------------------|:-----------------------------------------------------------------------------|
@@ -218,16 +218,16 @@ NOTE: Instructions are for Python 3.8
  
 ## COMMAND LINE PARAMETERS
 ### ruuvigw.py [-h] [-c config] [-l logconfig]
-| optional argument | long format | parameter                 |
-|:------------------|:------------|:--------------------------|
-| -h                | --help      |                           |
-| -c                | --config    | configuration file        |
-| -l                | --logconfig | logger configuration file |
+| optional argument | long format | parameter                                                |
+|:------------------|:------------|:---------------------------------------------------------|
+| -h                | --help      |                                                          |
+| -c                | --config    | configuration file (default: ruuvigw.json)               |
+| -l                | --logconfig | logger configuration file (defaut: ruuvigw_logging.json) |
+|                   | --check     | checks configuration file and prints it                  |
 
 ## SELECTION OF THE BLE SCANNING METHOD
-- socket, if Python supports AF_BLUETOOTH socket type
-- hcidump/hcitool, if found from the `/usr/bin/` directory
-- if none of the above is found, ruuvigw will not start
+- socket, if Python supports AF_BLUETOOTH socket
+- bleak, if bluez > 5.43 is isntalled
   
 # LICENCE
 MIT License is used for this software.

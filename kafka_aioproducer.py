@@ -60,9 +60,14 @@ class kafka_aioproducer():
         }
         
 #-------------------------------------------------------------------------------
-    async def _connect_producer(self):
+    def is_connected(self):
+        return self._connected
+
+#-------------------------------------------------------------------------------
+    async def connect_producer(self):
         logger.debug(f'{self._name}')
 
+        l_success = False
         try:
             self._producer = _producer(
                 loop=self._loop,
@@ -74,19 +79,22 @@ class kafka_aioproducer():
             self._connected = True
             logger.info(f'''{self._name} kafka connected bootstrap_servers: {self._producercfg['bootstrap_servers']}''')
             logger.info(f'''{self._name} kafka connected client_id:{self._producercfg['client_id']}''')
+            l_success = True
             return True
         except ConnectionError as l_e:
             logger.critical(f'''{self._name} ConnectionError: {l_e}''')    
-            self._producer = None        
         except:
             logger.exception(f'''{self._name}''')
-            self._producer = None 
-            raise
+        finally:
+            if not l_success:
+                await self._producer.stop()
+                del self._producer
+                self._producer = None        
 
         return False
 
 #-------------------------------------------------------------------------------
-    async def _disconnect_producer(self):
+    async def disconnect_producer(self):
         logger.debug(f'{self._name}')
 
         if self._producer and self._connected:
@@ -100,19 +108,15 @@ class kafka_aioproducer():
                 logger.exception(f'''*** {self._name}''')
             finally:
                 self._connected = False
-                try:
-                    del self._producer
-                except:
-                    logger.exception(f'''*** {self._name}''')
-                    pass
+                del self._producer
                 self._producer = None 
 
 #-------------------------------------------------------------------------------
-    async def _send(self, *, topic, value, key=None, partition=None, timestamp_ms=None):
-        logger.debug(f'''{self._name} topic: {topic} key:{key} value:{value}''')
+    async def send(self, *, topic, value, key=None, partition=None, timestamp_ms=None):
+        logger.debug(f'''{self._name} topic:{topic} key:{key} value:{value}''')
+        
         if not self._producer:
             return False
-
         if topic:
             try:
                 if isinstance(value, str):
@@ -131,7 +135,7 @@ class kafka_aioproducer():
                     partition=partition,
                     timestamp_ms=timestamp_ms
                 )
-                logger.debug(f'{self._name} key:{key.decode():20} topic:{l_obj.topic:20} partition:{l_obj.partition:02} offset:{l_obj.offset}')
+                logger.debug(f'{self._name} topic:{l_obj.topic:20} key:{key.decode():20} partition:{l_obj.partition}:{l_obj.offset}')
                 return True
             except asyncio.CancelledError:
                 logger.warning(f'''{self._name} CancelledError''')
