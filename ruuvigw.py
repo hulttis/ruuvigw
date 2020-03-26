@@ -11,9 +11,11 @@
 #               aiodns                                  // pipenv install aiodns
 #               aiomqtt                                 // pipenv install aiomqtt
 #               aiokafka                                // pipenv install aiokafka
+#               txdbus                                  // pipenv install txdbus (Linux)
+#               bleak                                   // pipenv install bleak (Windows)
 #               asyncio
 # dev:          pylint                                  // pipenv install -d pylint
-#               aiofiles                                // pipenv install aiofiles
+#               aiofiles                                // pipenv install aiofiles (Windows)
 # -------------------------------------------------------------------------------
 import os
 import sys

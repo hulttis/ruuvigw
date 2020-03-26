@@ -115,3 +115,4 @@ ruuvigw_logging_linux.json
 ruuvigw_linux.json
 ruuvigw_nr.json
 aioruuvitag/scanner_test.py
+ruuvigw_logging_ubuntu.json

@@ -13,8 +13,9 @@ aioinflux = "*"
 aiomqtt = "*"
 APScheduler = "*"
 aiokafka = "*"
-bleak = {version = "*", platform_system = "== 'Windows'"}
-aiofiles = {version = "*", platform_system = "== 'Windows'"}
+bleak = {version = "*",platform_system = "== 'Windows'"}
+aiofiles = {version = "*",platform_system = "== 'Windows'"}
+txdbus = {version = "*",platform_system = "== 'Linux'"}
 
 [requires]
 python_version = "3.7"
